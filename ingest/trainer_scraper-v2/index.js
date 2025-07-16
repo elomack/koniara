@@ -21,9 +21,9 @@ import pLimit from 'p-limit';
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
-const BUCKET_NAME         = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
-const PREFIX              = 'trainer_data/';        // GCS folder prefix
-const CONCURRENCY_LIMIT   = 10;                      // parallel fetches before backpressure
+const BUCKET_NAME       = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
+const PREFIX            = 'trainer_data/';        // GCS folder prefix
+const CONCURRENCY_LIMIT = 10;                      // parallel fetches before backpressure
 
 // Initialize GCS client
 const storage = new Storage();
@@ -62,6 +62,7 @@ async function fetchTrainerData(id) {
       trainer_id:      id,
       first_name:      t.firstName || null,
       last_name:       t.lastName  || null,
+      // Extract ISO3 code from nested licenceCountry object
       licence_country: t.licenceCountry?.alfa3 || null
     };
   } catch (err) {
