@@ -49,15 +49,74 @@ async function fetchJockeyData(id) {
 async function scrapeBatchJ(startId, batchSize) {
   if (startId <= 0 || batchSize <= 0) throw new Error('❌ startId and batchSize must be positive integers');
   console.debug('⏳ Scraping jockeys', `${startId}–${startId + batchSize - 1}`);
-  const limit = pLimit(CONCURRENCY_J);
-  const results = await Promise.all(
-    Array.from({ length: batchSize }, (_, idx) => limit(async () => fetchJockeyData(startId + idx)))
-  );
-  let misses=0, endIndex = results.length;
-  for (let i=0;i<results.length;i++){
-    if(results[i]===null) misses++; else misses=0;
-    if(misses>=10){ endIndex=i-9; break; }
+
+  const jockeys = [];
+  let misses = 0;
+  let nextId = startId;
+  const endId = startId + batchSize;
+  const active = new Set();
+
+  // Launch one fetch and schedule next
+  const launchOne = async id => {
+    active.add(id);
+    try {
+      const rec = await fetchJockeyData(id);
+      if (rec) {
+        misses = 0;
+        jockeys.push(rec);
+      } else {
+        misses++;
+        console.debug(`⚠️ Miss #${misses} at jockey ${id}`);
+      }
+    } finally {
+      active.delete(id);
+      schedule();
+    }
+  };
+
+  // Schedule up to concurrency and cutoff
+  const schedule = () => {
+    while (
+      active.size < CONCURRENCY_J &&
+      nextId < endId &&
+      misses < CUTOFF
+    ) {
+      launchOne(nextId++);
+    }
+  };
+
+  // Start initial wave
+  schedule();
+
+  // Wait until all done or cutoff reached
+  await new Promise(resolve => {
+    const check = () => {
+      if (misses >= CUTOFF) {
+        console.warn(`⚠️ Stopped after several consecutive misses at ID ${nextId - 1}`);
+        return resolve();
+      } else if (nextId >= endId && active.size === 0) {
+        return resolve();
+      }
+      setTimeout(check, 100);
+    };
+    check();
+  });
+
+  if (jockeys.length === 0) {
+    console.debug('⚠️ No jockeys fetched');
+    return;
   }
+
+  const ndjson = jockeys.map(o => JSON.stringify(o)).join('');
+  const ts = formatDateJ(new Date());
+  const fileName = `${PREFIX_J}shard_${startId}_${startId + jockeys.length - 1}_${ts}.ndjson`;
+
+  console.debug('⏳ Saving shard to', fileName);
+  await storageJ.bucket(BUCKET_NAME_J).file(fileName)
+    .save(ndjson, { contentType: 'application/x-ndjson' });
+
+  console.debug('✅ Saved shard:', `gs://${BUCKET_NAME_J}/${fileName}`);
+}  
   const valid = results.slice(0,endIndex).filter(r=>r!==null);
   if(!valid.length){console.debug('⏳ No jockeys fetched');return;}
   const ndjson = valid.map(o=>JSON.stringify(o)).join('\n');
@@ -66,7 +125,7 @@ async function scrapeBatchJ(startId, batchSize) {
   console.debug('⏳ Saving shard to', fileName);
   await storageJ.bucket(BUCKET_NAME_J).file(fileName).save(ndjson,{contentType:'application/x-ndjson'});
   console.debug('✅ Saved shard:',`gs://${BUCKET_NAME_J}/${fileName}`);
-}
+
 
 (async()=>{
   const startId = parseInt(process.argv[2],10)||1;
