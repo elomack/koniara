@@ -28,6 +28,7 @@ function formatDateJ(date) {
 async function fetchJockeyData(id) {
   try {
     const res = await axios.get(`https://homas.pkwk.org/homas/race/search/jockey/${id}`);
+    console.debug('✅ Fetched jockey', id);
     const j = res.data;
     return {
       jockey_id:      id,
