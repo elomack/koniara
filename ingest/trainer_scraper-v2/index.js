@@ -58,6 +58,7 @@ async function fetchTrainerData(id) {
       `https://homas.pkwk.org/homas/race/search/trainer/${id}`
     );
     const t = res.data;
+    console.debug('⚠️ Raw licenceCountry payload for trainer ' + id + ':', t.licenceCountry);
     return {
       trainer_id:      id,
       first_name:      t.firstName || null,
