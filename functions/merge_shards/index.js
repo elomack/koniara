@@ -12,7 +12,7 @@ const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
  */
 exports.mergeShards = async (req, res) => {
   try {
-    console.debug('✨ mergeShards invoked with body:', req.body);
+    console.debug('➡️ mergeShards invoked with body:', req.body);
     const { prefix, outputPrefix, pattern } = req.body;
     if (!prefix || !pattern || !outputPrefix) {
       console.warn('❗ Missing required fields: prefix, pattern, outputPrefix');
@@ -65,7 +65,7 @@ exports.mergeShards = async (req, res) => {
     }
     await new Promise((ok, ko) => {
       writeStream.end(() => {
-        console.debug('✋ Finished writing master file');
+        console.debug('✅ Finished writing master file');
         ok();
       });
       writeStream.on('error', err => {
@@ -79,7 +79,7 @@ exports.mergeShards = async (req, res) => {
     await Promise.all(shardNames.map(name =>
       bucket.file(prefix + name)
     .delete()
-    .then(() => console.debug(`🗑️ Deleted ${name}`))
+    .then(() => console.debug(`✅🗑️ Deleted ${name}`))
     .catch(err => console.warn(`⚠️ Failed to delete ${name}:`, err))
     ));
 
