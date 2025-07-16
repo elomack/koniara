@@ -1,0 +1,15 @@
+{
+  "name": "jockey-scraper",
+  "version": "1.0.0",
+  "description": "Batch-based Jockey scraper for horse-predictor-v2",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0",
+    "axios": "^1.10.0",
+    "p-limit": "^6.2.0"
+  }
+}
