@@ -1,0 +1,9 @@
+{
+  "name": "merge-shards",
+  "version": "1.0.0",
+  "description": "Generic merge shards Cloud Function",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/storage": "^7.16.0"
+  }
+}
