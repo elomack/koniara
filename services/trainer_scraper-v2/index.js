@@ -6,24 +6,17 @@
  *
  * Usage:
  *   node index.js <startId> <batchSize>
- *
- * Steps:
- *   1) For each trainer ID from startId to startId+batchSize-1, call the Trainer API
- *   2) On 404, skip. After 10 consecutive 404s, assume end-of-table and truncate the batch
- *   3) Collect valid trainer objects, serialize to NDJSON
- *   4) Save NDJSON to GCS at gs://BUCKET_NAME/trainer_data/shard_<start>_<end>_<timestamp>.ndjson
  */
-
 import { Storage } from '@google-cloud/storage';
 import axios from 'axios';
-import pLimit from 'p-limit';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIGURATION
 // ─────────────────────────────────────────────────────────────────────────────
 const BUCKET_NAME       = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
 const PREFIX            = 'trainer_data/';        // GCS folder prefix
-const CONCURRENCY_LIMIT = 10;                      // parallel fetches before backpressure
+const CONCURRENCY_LIMIT = 10;                      // parallel fetches
+const CUTOFF            = 10;                      // consecutive 404s before stopping
 
 // Initialize GCS client
 const storage = new Storage();
@@ -58,7 +51,6 @@ async function fetchTrainerData(id) {
       `https://homas.pkwk.org/homas/race/search/trainer/${id}`
     );
     const t = res.data;
-
     return {
       trainer_id:      id,
       first_name:      t.firstName || null,
@@ -67,72 +59,93 @@ async function fetchTrainerData(id) {
     };
   } catch (err) {
     if (err.response?.status === 404) {
-      console.debug(`❌ Trainer ${id} not found (404)`);
+      console.debug(`⚠️ Trainer ${id} not found (404), skipping`);
       return null;
     }
-    throw err;
+    console.error(`❌ Fatal error fetching trainer ${id}:`, err);
+    return null;
   }
 }
 
 /**
  * scrapeBatch(startId, batchSize)
  *
- * Orchestrates the fetch of a batch of trainers and writes to GCS.
+ * Uses a promise-pool to fetch trainers in parallel,
+ * stops after CUTOFF consecutive misses, then writes NDJSON to GCS.
  */
 async function scrapeBatch(startId, batchSize) {
   if (startId <= 0 || batchSize <= 0) {
     throw new Error('❌ startId and batchSize must be positive integers');
   }
-
   console.debug('⏳ Scraping trainers', `${startId}–${startId + batchSize - 1}`);
-  const limit   = pLimit(CONCURRENCY_LIMIT);
-  const results = await Promise.all(
-    Array.from({ length: batchSize }, (_, idx) => limit(async () => {
-      const id = startId + idx;
-      try {
-        const data = await fetchTrainerData(id);
-        if (data) console.debug('✅ Fetched trainer', id);
-        return data;
-      } catch (err) {
-        console.error('❌ Error in fetchTrainerData for', id, err);
-        return null;
-      }
-    }))
-  );
 
-  // Detect 10 consecutive 404s => assume end of table
-  let consecutiveMisses = 0;
-  let endIndex = results.length;
-  for (let i = 0; i < results.length; i++) {
-    if (results[i] === null) {
-      consecutiveMisses++;
-    } else {
-      consecutiveMisses = 0;
+  const trainers = [];
+  let misses = 0;
+  let nextId = startId;
+  const endId = startId + batchSize;
+  const active = new Set();
+
+  // Launch one fetch and schedule next
+  const launchOne = async (id) => {
+    active.add(id);
+    try {
+      const rec = await fetchTrainerData(id);
+      if (rec) {
+        misses = 0;
+        console.debug('✅ Fetched trainer', id);
+        trainers.push(rec);
+      } else {
+        misses++;
+        console.debug(`⚠️ Miss #${misses} at trainer ${id}`);
+      }
+    } finally {
+      active.delete(id);
+      schedule();
     }
-    if (consecutiveMisses >= 10) {
-      const idReached = startId + i;
-      console.warn(`⚠️ Detected 10 consecutive misses up to trainer ${idReached}, stopping batch.`);
-      endIndex = i - 9;
-      break;
+  };
+
+  // Schedule up to concurrency and cutoff
+  const schedule = () => {
+    while (
+      active.size < CONCURRENCY_LIMIT &&
+      nextId < endId &&
+      misses < CUTOFF
+    ) {
+      launchOne(nextId++);
     }
-  }
-  const truncated = results.slice(0, endIndex);
-  const valid     = truncated.filter(r => r !== null);
-  if (valid.length === 0) {
-    console.debug('⏳ No trainer records fetched in this batch.');
+  };
+
+  // Start initial wave
+  schedule();
+
+  // Wait until all done or cutoff reached
+  await new Promise(resolve => {
+    const check = () => {
+      if (misses >= CUTOFF) {
+        console.warn(`⚠️ Stopped after ${CUTOFF} consecutive misses at ID ${nextId - 1}`);
+        return resolve();
+      } else if (nextId >= endId && active.size === 0) {
+        return resolve();
+      }
+      setTimeout(check, 100);
+    };
+    check();
+  });
+
+  if (trainers.length === 0) {
+    console.debug('⚠️ No trainer records fetched; nothing to save');
     return;
   }
 
   // Serialize to NDJSON
-  const ndjson = valid.map(obj => JSON.stringify(obj)).join('\n');
-
-  // Build filename with human-readable timestamp
-  const ts       = formatDate(new Date());
-  const fileName = `${PREFIX}shard_${startId}_${startId + batchSize - 1}_${ts}.ndjson`;
-  const file     = storage.bucket(BUCKET_NAME).file(fileName);
+  const ndjson = trainers.map(o => JSON.stringify(o)).join('\n');
+  const ts = formatDate(new Date());
+  const fileName = `${PREFIX}shard_${startId}_${startId + trainers.length - 1}_${ts}.ndjson`;
 
   console.debug('⏳ Saving shard to', fileName);
-  await file.save(ndjson, { contentType: 'application/x-ndjson' });
+  await storage.bucket(BUCKET_NAME).file(fileName)
+    .save(ndjson, { contentType: 'application/x-ndjson' });
+
   console.debug('✅ Saved shard:', `gs://${BUCKET_NAME}/${fileName}`);
 }
 
