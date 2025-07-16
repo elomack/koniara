@@ -1,7 +1,7 @@
 {
-  "name": "horse-data-scraper",
+  "name": "trainer-scraper",
   "version": "1.0.0",
-  "description": "Batch‐based Horse scraper for horse-predictor-v2",
+  "description": "Batch‐based Trainer scraper for horse-predictor-v2",
   "type": "module",
   "main": "index.js",
   "scripts": {

@@ -1,14 +1,15 @@
+# ingest/horse_data_scraper-v2/Dockerfile
 FROM node:20-slim
 
+# Create app directory
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+# Install only production dependencies
+COPY package.json package-lock.json* ./
+RUN npm install --production
 
+# Copy the rest of the source code
 COPY . .
 
-ENV PORT=8080
-EXPOSE 8080
-
-ENTRYPOINT ["node", "src/index.js"]
-CMD []
+# This job runs index.js directly; no HTTP server needed
+ENTRYPOINT ["node", "index.js"]
