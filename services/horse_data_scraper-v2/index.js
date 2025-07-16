@@ -173,7 +173,7 @@ async function fetchHorseData(id) {
     };
   } catch (err) {
     if (err.response?.status === 404) {
-      console.debug(`⚠️ Horse ${id} not found (404), skipping`);
+      console.debug(`❌ Horse ${id} not found (404), skipping`);
     } else {
       console.error(`❌ Fatal error fetching horse data for horse ${id}:`, err);
     }
