@@ -104,23 +104,23 @@ function normalizeRacesData(raw) {
     prize_currency:   r.race?.currency?.code || null,
     jockey_id:        r.jockey?.id || null,
     trainer_id:       r.trainer?.id || null,
-    race_number:       r.race?.number || null,
-    race_name:         r.race?.name || null,
-    race_date:         r.race?.date || null,
-    track_distance_m:  r.race?.trackDistance || null,
-    temperature_c:     r.race?.temperature || null,
-    weather:           r.race?.weather || null,
-    race_group:        r.race?.group || null,
-    subtype:           r.race?.subType || null,
-    category_id:       r.race?.category?.id || null,
-    category_breed:    r.race?.category?.horseBreed || null,
-    category_name:     r.race?.category?.name || null,
-    country_code:      r.race?.country?.alfa3 || null,
-    city_name:         r.race?.city?.name || null,
-    track_type:        r.race?.trackType?.name || null,
-    race_rules:        r.race?.fullConditions || null,
-    payments:          r.race?.payments || null,
-    race_style:        r.race?.style?.name || null
+    race_number:      r.race?.number || null,
+    race_name:        r.race?.name || null,
+    race_date:        r.race?.date || null,
+    track_distance_m: r.race?.trackDistance || null,
+    temperature_c:    r.race?.temperature || null,
+    weather:          r.race?.weather || null,
+    race_group:       r.race?.group || null,
+    subtype:          r.race?.subType || null,
+    category_id:      r.race?.category?.id || null,
+    category_breed:   r.race?.category?.horseBreed || null,
+    category_name:    r.race?.category?.name || null,
+    country_code:     r.race?.country?.alfa3 || null,
+    city_name:        r.race?.city?.name || null,
+    track_type:       r.race?.trackType?.name || null,
+    race_rules:       r.race?.fullConditions || null,
+    payments:         r.race?.payments || null,
+    race_style:       r.race?.style?.name || null
   }));
 }
 
@@ -199,6 +199,7 @@ async function scrapeBatch(startId, batchSize) {
         horses.push(rec);
       } else {
         misses++;
+        console.debug(`⚠️ Miss #${misses} at horse ${id}`);
       }
     } finally {
       active.delete(id);
@@ -206,12 +207,12 @@ async function scrapeBatch(startId, batchSize) {
     }
   };
 
-  // Fill up to CONCURRENCY_LIMIT
+  // Fill up to CONCURRENCY_LIMIT but ensure total tasks (active + misses) < CUTOFF
   const schedule = () => {
     while (
       active.size < CONCURRENCY_LIMIT &&
       nextId < endId &&
-      misses < CUTOFF
+      (active.size + misses) < CUTOFF
     ) {
       launchOne(nextId++);
     }
@@ -223,8 +224,8 @@ async function scrapeBatch(startId, batchSize) {
   // Wait for completion or cutoff
   await new Promise(resolve => {
     const check = () => {
-      if (misses >= CUTOFF) {
-        console.warn(`⚠️ Stopped after several consecutive misses at ID ${nextId - 1}`);
+      if ((active.size + misses) >= CUTOFF) {
+        console.warn(`⚠️ Stopped after ${CUTOFF} consecutive misses at ID ${nextId - 1}`);
         resolve();
       } else if (nextId >= endId && active.size === 0) {
         resolve();
