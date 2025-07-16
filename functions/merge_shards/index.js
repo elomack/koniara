@@ -75,13 +75,13 @@ exports.mergeShards = async (req, res) => {
     });
 
     // 4. Delete shards (commented out until prod)
-    // console.debug('🗑️ Deleting shard files');
-    // await Promise.all(shardNames.map(name =>
-    //   bucket.file(prefix + name)
-    //     .delete()
-    //     .then(() => console.debug(`🗑️ Deleted ${name}`))
-    //     .catch(err => console.warn(`⚠️ Failed to delete ${name}:`, err))
-    // ));
+    console.debug('🗑️ Deleting shard files');
+    await Promise.all(shardNames.map(name =>
+      bucket.file(prefix + name)
+    .delete()
+    .then(() => console.debug(`🗑️ Deleted ${name}`))
+    .catch(err => console.warn(`⚠️ Failed to delete ${name}:`, err))
+    ));
 
     console.info(`🎉 mergeShards completed. Master: ${masterName}, Count: ${shardNames.length}`);
     return res.status(200).json({ masterFile: masterName, mergedCount: shardNames.length });
