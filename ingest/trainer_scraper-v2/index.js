@@ -59,11 +59,11 @@ async function fetchTrainerData(id) {
     );
     const t = res.data;
     // Debug raw response to ensure correct field
-    console.warn(`🎯 Raw licenceCountry for trainer ${id}:`, t.licenceCountry);
+    console.error(`🎯 Raw licenceCountry for trainer ${id}:`, t.licenceCountry);
 
     // Extract ISO3 code from nested licenceCountry object (correct camelCase)
     const iso3 = t.licenceCountry?.alfa3 || null;
-    console.warn(`🎯 Mapped licence_country for trainer ${id}:`, iso3);
+    console.error(`🎯 Mapped licence_country for trainer ${id}:`, iso3);
 
     return {
       trainer_id:      id,
