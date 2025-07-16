@@ -12,7 +12,7 @@ const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
  */
 exports.mergeShards = async (req, res) => {
   try {
-    console.debug('➡️ mergeShards invoked with body:', req.body);
+    console.debug('✨ mergeShards invoked with body:', req.body);
     const { prefix, outputPrefix, pattern } = req.body;
     if (!prefix || !pattern || !outputPrefix) {
       console.warn('❗ Missing required fields: prefix, pattern, outputPrefix');
@@ -35,12 +35,14 @@ exports.mergeShards = async (req, res) => {
       return res.status(404).send(`⚠️ No shards matching ${pattern} under ${prefix}`);
     }
 
-    // 2. Build master filename
+        // 2. Build master filename dynamically based on outputPrefix
     const ts = new Date().toISOString().replace(/[:.]/g,'_');
-    const masterName = `${outputPrefix}MASTERFILE_${prefix
-      .replace(/\/$/,'').toUpperCase()}_${ts}.ndjson`;
+    // derive a clean uppercase tag from outputPrefix: remove trailing slash and underscores
+    const folderKey = outputPrefix.replace(/\/$/, '');
+    const tag = folderKey.replace(/_/g, '').toUpperCase();
+    const masterName = `${outputPrefix}MASTERFILE_${tag}_${ts}.ndjson`;
     const masterFile = bucket.file(masterName);
-    console.debug(`🖊️ Creating master file: ${masterName}`);
+    console.debug(`🖊️ Creating master file at ${masterName}`);
 
     // 3. Stream‐concatenate
     const writeStream = masterFile.createWriteStream({ contentType: 'application/x-ndjson' });
@@ -63,7 +65,7 @@ exports.mergeShards = async (req, res) => {
     }
     await new Promise((ok, ko) => {
       writeStream.end(() => {
-        console.debug('✅ Finished writing master file');
+        console.debug('✋ Finished writing master file');
         ok();
       });
       writeStream.on('error', err => {
