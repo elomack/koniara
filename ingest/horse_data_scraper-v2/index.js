@@ -3,7 +3,7 @@ import axios from 'axios';
 import pLimit from 'p-limit';
 
 // CONFIG: Your GCP bucket name
-const BUCKET_NAME = 'horse-racing-data-elomack';
+const BUCKET_NAME = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
 
 // Max concurrency of parallel fetches
 const CONCURRENCY_LIMIT = 10;
@@ -15,13 +15,29 @@ const storage = new Storage();
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 /**
+ * formatDate()
+ *
+ * Formats a Date object as YYYY_MM_DD_hh:mm:ss
+ */
+function formatDate(date) {
+  const pad = n => String(n).padStart(2, '0');
+  const YYYY = date.getFullYear();
+  const MM   = pad(date.getMonth() + 1);
+  const DD   = pad(date.getDate());
+  const hh   = pad(date.getHours());
+  const mm   = pad(date.getMinutes());
+  const ss   = pad(date.getSeconds());
+  return `${YYYY}_${MM}_${DD}_${hh}:${mm}:${ss}`;
+}
+
+/**
  * normalizeCareerData()
  *
  * Groups raw career entries by (raceYear, raceType), merging prize amounts & currencies.
  */
 function normalizeCareerData(raw) {
   if (!Array.isArray(raw)) {
-    console.warn('Warning: career data is not iterable:', raw);
+    console.debug('⚠️ Warning: career data is not iterable');
     return [];
   }
 
@@ -47,7 +63,6 @@ function normalizeCareerData(raw) {
     }
 
     if (rec.prize) {
-      // rec.prize format: "12345 zł" or "678 €"
       const parts = rec.prize.trim().split(/\s+/);
       const amount = parts[0];
       const currency = parts[1] || '';
@@ -56,7 +71,6 @@ function normalizeCareerData(raw) {
     }
   }
 
-  // Convert map values to array, join arrays into comma-separated strings
   return Array.from(map.values()).map(e => ({
     race_year:        e.race_year,
     race_type:        e.race_type,
@@ -76,7 +90,7 @@ function normalizeCareerData(raw) {
  */
 function normalizeRacesData(raw) {
   if (!Array.isArray(raw)) {
-    console.warn('Warning: races data is not iterable:', raw);
+    console.debug('⚠️ Warning: races data is not iterable');
     return [];
   }
 
@@ -96,7 +110,7 @@ function normalizeRacesData(raw) {
     // RACES fields (nested race info)
     race_number:       r.race?.number || null,
     race_name:         r.race?.name || null,
-    race_date:         r.race?.date || null,     // ms timestamp
+    race_date:         r.race?.date || null,
     track_distance_m:  r.race?.trackDistance || null,
     temperature_c:     r.race?.temperature || null,
     weather:           r.race?.weather || null,
@@ -117,7 +131,7 @@ function normalizeRacesData(raw) {
 /**
  * fetchHorseData(id)
  *
- * Fetches `/horse/{id}`, `/horse/{id}/career`, `/horse/{id}/races` and normalizes.
+ * Fetches horse details and normalizes career & races.
  */
 async function fetchHorseData(id) {
   try {
@@ -134,7 +148,6 @@ async function fetchHorseData(id) {
     );
     const racesData = normalizeRacesData(racesRes.data);
 
-    // Build the flattened horse object
     return {
       horse_id:           id,
       horse_name:         horse.name || null,
@@ -155,11 +168,8 @@ async function fetchHorseData(id) {
       races:              racesData
     };
   } catch (err) {
-    if (err.response?.status === 404) {
-      console.log(`Horse ${id} not found`);
-      return null;
-    }
-    throw err;
+    console.debug('❌ Error fetching horse data for horse ' + id + ':', err);
+    return null;
   }
 }
 
@@ -170,27 +180,59 @@ async function fetchHorseData(id) {
  */
 async function scrapeBatch(startId, batchSize) {
   if (startId <= 0 || batchSize <= 0) {
-    throw new Error('startId and batchSize must be positive integers');
+    throw new Error('❌ startId and batchSize must be positive integers');
   }
 
-  console.log(`Scraping horses ${startId}–${startId + batchSize - 1}`);
+  console.debug('⏳ Scraping horses', `${startId}–${startId + batchSize - 1}`);
   const limit = pLimit(CONCURRENCY_LIMIT);
   const results = await Promise.all(
     Array.from({ length: batchSize }, (_, i) => limit(async () => {
       const id = startId + i;
-      const data = await fetchHorseData(id);
-      return data;
+      try {
+        const data = await fetchHorseData(id);
+        console.debug('✅ Fetched horse', id);
+        return data;
+      } catch (err) {
+        console.error('❌ Error in fetchHorseData:', err);
+        return null;
+      }
     }))
   );
 
-  // Filter out nulls (not found) and serialize
-  const valid = results.filter(r => r !== null);
+  // Detect end-of-database: if 10 consecutive misses, assume no more records
+  let consecutiveMisses = 0;
+  let endIndex = results.length;
+  for (let i = 0; i < results.length; i++) {
+    if (results[i] === null) {
+      consecutiveMisses++;
+    } else {
+      consecutiveMisses = 0;
+    }
+    if (consecutiveMisses >= 10) {
+      const idReached = startId + i;
+      console.warn(`⚠️ Detected 10 consecutive misses up to horse ${idReached}; assuming end of database and stopping batch.`);
+      endIndex = i - 9;
+      break;
+    }
+  }
+  const truncatedResults = results.slice(0, endIndex);
+  const valid = truncatedResults.filter(r => r !== null);
+  if (valid.length === 0) {
+    console.debug('⚠️ No records fetched in this batch.');
+    return;
+  }
+
   const ndjson = valid.map(r => JSON.stringify(r)).join('\n');
 
-  const fileName = `horse_data/shard_${startId}_${startId + batchSize - 1}_${Date.now()}.ndjson`;
+  // Build human-readable timestamp
+  const ts = formatDate(new Date());
+  const fileName = `horse_data/shard_${startId}_${startId + batchSize - 1}_${ts}.ndjson`;
+
+  console.debug('⏳ Saving shard to', fileName);
   const file = storage.bucket(BUCKET_NAME).file(fileName);
   await file.save(ndjson, { contentType: 'application/x-ndjson' });
-  console.log(`Saved shard: gs://${BUCKET_NAME}/${fileName}`);
+
+  console.debug('✅ Saved shard:', `gs://${BUCKET_NAME}/${fileName}`);
 }
 
 // CLI entrypoint
@@ -199,9 +241,9 @@ async function scrapeBatch(startId, batchSize) {
   const batchSize = parseInt(process.argv[3], 10) || 1000;
   try {
     await scrapeBatch(startId, batchSize);
-    console.log('Batch complete');
+    console.debug('✅ Batch complete');
   } catch (err) {
-    console.error('Error in scrapeBatch:', err);
+    console.error('❌ Error in scrapeBatch:', err);
     process.exit(1);
   }
 })();
