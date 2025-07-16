@@ -172,7 +172,11 @@ async function fetchHorseData(id) {
       races:              racesData
     };
   } catch (err) {
-    console.debug('❌ Error fetching horse data for horse ' + id + ':', err);
+    if (err.response?.status === 404) {
+      console.debug(`⚠️ Horse ${id} not found (404), skipping`);
+    } else {
+      console.error(`❌ Fatal error fetching horse data for horse ${id}:`, err);
+    }
     return null;
   }
 }
@@ -192,14 +196,9 @@ async function scrapeBatch(startId, batchSize) {
   const results = await Promise.all(
     Array.from({ length: batchSize }, (_, i) => limit(async () => {
       const id = startId + i;
-      try {
-        const data = await fetchHorseData(id);
-        console.debug('✅ Fetched horse', id);
-        return data;
-      } catch (err) {
-        console.error('❌ Error in fetchHorseData:', err);
-        return null;
-      }
+      const data = await fetchHorseData(id);
+      if (data) console.debug('✅ Fetched horse', id);
+      return data;
     }))
   );
 
