@@ -34,6 +34,7 @@ function formatDate(date) {
  * normalizeCareerData()
  *
  * Groups raw career entries by (raceYear, raceType), merging prize amounts & currencies.
+ * Detects prize-only records (raceYear === null) and merges into the last real bucket.
  */
 function normalizeCareerData(raw) {
   if (!Array.isArray(raw)) {
@@ -42,32 +43,35 @@ function normalizeCareerData(raw) {
   }
 
   const map = new Map();
+  let lastKey = null;
+
   for (const rec of raw) {
-    const year = rec.raceYear;
-    const type = rec.raceType || 'UNKNOWN';
-    const key = `${year}::${type}`;
-    let entry = map.get(key);
+    if (rec.raceYear !== null) {
+      const type = rec.raceType || 'UNKNOWN';
+      const key  = `${rec.raceYear}::${type}`;
 
-    if (!entry) {
-      entry = {
-        race_year:        year,
-        race_type:        type,
-        horse_age:        rec.horseAge || null,
-        race_count:       rec.raceCount || 0,
-        race_won_count:   rec.raceWonCount || 0,
-        race_prize_count: rec.racePrizeCount || 0,
-        prize_amounts:    [],
-        prize_currencies: []
-      };
-      map.set(key, entry);
-    }
-
-    if (rec.prize) {
-      const parts = rec.prize.trim().split(/\s+/);
-      const amount = parts[0];
-      const currency = parts[1] || '';
-      entry.prize_amounts.push(amount);
-      entry.prize_currencies.push(currency);
+      if (!map.has(key)) {
+        map.set(key, {
+          race_year:        rec.raceYear,
+          race_type:        rec.raceType || null,
+          horse_age:        rec.horseAge || null,
+          race_count:       rec.raceCount || 0,
+          race_won_count:   rec.raceWonCount || 0,
+          race_prize_count: rec.racePrizeCount || 0,
+          prize_amounts:    [],
+          prize_currencies: []
+        });
+      }
+      lastKey = key;
+    } else if (lastKey) {
+      const entry = map.get(lastKey);
+      if (rec.prize) {
+        const parts = rec.prize.trim().split(/\s+/);
+        const amount = parts[0];
+        const currency = parts[1] || '';
+        entry.prize_amounts.push(amount);
+        entry.prize_currencies.push(currency);
+      }
     }
   }
 
@@ -110,7 +114,7 @@ function normalizeRacesData(raw) {
     // RACES fields (nested race info)
     race_number:       r.race?.number || null,
     race_name:         r.race?.name || null,
-    race_date:         r.race?.date || null,
+    race_date:         r.race?.date || null,     // ms timestamp
     track_distance_m:  r.race?.trackDistance || null,
     temperature_c:     r.race?.temperature || null,
     weather:           r.race?.weather || null,
