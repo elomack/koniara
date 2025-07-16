@@ -62,7 +62,7 @@ async function fetchTrainerData(id) {
       trainer_id:      id,
       first_name:      t.firstName || null,
       last_name:       t.lastName  || null,
-      licence_country: t.licenceCountry || null
+      licence_country: t.licenceCountry?.alfa3 || null
     };
   } catch (err) {
     if (err.response?.status === 404) {
