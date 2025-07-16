@@ -88,7 +88,6 @@ async function scrapeBatch(startId, batchSize) {
         breeders.push(rec);
       } else {
         misses++;
-        console.debug(`⚠️ Miss #${misses} at breeder ${id}`);
       }
     } finally {
       active.delete(id);
@@ -114,7 +113,7 @@ async function scrapeBatch(startId, batchSize) {
   await new Promise(resolve => {
     const check = () => {
       if (misses >= CUTOFF) {
-        console.warn(`⚠️ Stopped after ${CUTOFF} consecutive misses at ID ${nextId - 1}`);
+        console.warn(`⚠️ Stopped after several consecutive misses at ID ${nextId - 1}`);
         return resolve();
       } else if (nextId >= endId && active.size === 0) {
         return resolve();
