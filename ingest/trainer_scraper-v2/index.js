@@ -58,14 +58,18 @@ async function fetchTrainerData(id) {
       `https://homas.pkwk.org/homas/race/search/trainer/${id}`
     );
     const t = res.data;
-    console.debug('⚠️ Raw licenceCountry payload for trainer ' + id + ':', t.licenceCountry);
-    console.warn(`⏰ Raw licenceCountry payload for trainer ${id}: ${JSON.stringify(t.licenceCountry)}`);
+    // Debug raw response to ensure correct field
+    console.warn(`🎯 Raw licenceCountry for trainer ${id}:`, t.licenceCountry);
+
+    // Extract ISO3 code from nested licenceCountry object (correct camelCase)
+    const iso3 = t.licenceCountry?.alfa3 || null;
+    console.warn(`🎯 Mapped licence_country for trainer ${id}:`, iso3);
+
     return {
       trainer_id:      id,
       first_name:      t.firstName || null,
       last_name:       t.lastName  || null,
-      // Extract ISO3 code from nested licenceCountry object
-      licence_country: t.licenceCountry?.alfa3 || null
+      licence_country: iso3
     };
   } catch (err) {
     if (err.response?.status === 404) {
