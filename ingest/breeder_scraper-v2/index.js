@@ -28,6 +28,7 @@ async function fetchBreederData(id) {
   try {
     const res = await axios.get(`https://homas.pkwk.org/homas/race/search/breeder/${id}`);
     const b = res.data;
+    console.debug('✅ Fetched breeder', id);
     return {
       breeder_id: id,
       name:       b.name || null,
