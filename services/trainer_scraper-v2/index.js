@@ -91,7 +91,7 @@ async function scrapeBatch(startId, batchSize) {
       const id = startId + idx;
       try {
         const data = await fetchTrainerData(id);
-        console.debug('✅ Fetched trainer', id);
+        if (data) console.debug('✅ Fetched trainer', id);
         return data;
       } catch (err) {
         console.error('❌ Error in fetchTrainerData for', id, err);
