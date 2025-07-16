@@ -6,15 +6,24 @@
  */
 import { Storage } from '@google-cloud/storage';
 import axios from 'axios';
-import pLimit from 'p-limit';
 
-const BUCKET_NAME_J   = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
-const PREFIX_J        = 'jockey_data/';
-const CONCURRENCY_J   = 10;
-const storageJ        = new Storage();
-const delayJ = ms => new Promise(res => setTimeout(res, ms));
+// CONFIGURATION
+const BUCKET_NAME = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
+const PREFIX      = 'jockey_data/';
+const CONCURRENCY = 10;   // parallel fetch limit
+const CUTOFF      = 10;   // consecutive 404s before stopping
 
-function formatDateJ(date) {
+// Initialize GCS client
+const storage = new Storage();
+
+// Helper: delay execution by ms
+const delay = ms => new Promise(res => setTimeout(res, ms));
+
+/**
+ * formatDate()
+ * Formats a Date as YYYY_MM_DD_hh:mm:ss for filenames
+ */
+function formatDate(date) {
   const pad = n => String(n).padStart(2, '0');
   const YYYY = date.getFullYear();
   const MM   = pad(date.getMonth() + 1);
@@ -25,11 +34,15 @@ function formatDateJ(date) {
   return `${YYYY}_${MM}_${DD}_${hh}:${mm}:${ss}`;
 }
 
+/**
+ * fetchJockeyData(id)
+ * Fetches /jockey/{id} and returns normalized object, or null on 404.
+ */
 async function fetchJockeyData(id) {
   try {
     const res = await axios.get(`https://homas.pkwk.org/homas/race/search/jockey/${id}`);
-    console.debug('✅ Fetched jockey', id);
     const j = res.data;
+    console.debug('✅ Fetched jockey', id);
     return {
       jockey_id:      id,
       first_name:     j.firstName || null,
@@ -38,7 +51,7 @@ async function fetchJockeyData(id) {
     };
   } catch (err) {
     if (err.response?.status === 404) {
-      console.debug(`❌ Jockey ${id} not found (404)`);
+      console.debug(`⚠️ Jockey ${id} not found (404), skipping`);
       return null;
     }
     console.error(`❌ Error fetching jockey ${id}:`, err);
@@ -46,8 +59,15 @@ async function fetchJockeyData(id) {
   }
 }
 
-async function scrapeBatchJ(startId, batchSize) {
-  if (startId <= 0 || batchSize <= 0) throw new Error('❌ startId and batchSize must be positive integers');
+/**
+ * scrapeBatch(startId, batchSize)
+ * Fetches a batch of jockeys in parallel, stops after CUTOFF consecutive misses,
+ * then writes NDJSON to GCS.
+ */
+async function scrapeBatch(startId, batchSize) {
+  if (startId <= 0 || batchSize <= 0) {
+    throw new Error('❌ startId and batchSize must be positive integers');
+  }
   console.debug('⏳ Scraping jockeys', `${startId}–${startId + batchSize - 1}`);
 
   const jockeys = [];
@@ -56,8 +76,8 @@ async function scrapeBatchJ(startId, batchSize) {
   const endId = startId + batchSize;
   const active = new Set();
 
-  // Launch one fetch and schedule next
-  const launchOne = async id => {
+  // Launch a fetch and schedule the next one
+  const launchOne = async (id) => {
     active.add(id);
     try {
       const rec = await fetchJockeyData(id);
@@ -77,7 +97,7 @@ async function scrapeBatchJ(startId, batchSize) {
   // Schedule up to concurrency and cutoff
   const schedule = () => {
     while (
-      active.size < CONCURRENCY_J &&
+      active.size < CONCURRENCY &&
       nextId < endId &&
       misses < CUTOFF
     ) {
@@ -92,7 +112,7 @@ async function scrapeBatchJ(startId, batchSize) {
   await new Promise(resolve => {
     const check = () => {
       if (misses >= CUTOFF) {
-        console.warn(`⚠️ Stopped after several consecutive misses at ID ${nextId - 1}`);
+        console.warn(`⚠️ Stopped after ${CUTOFF} consecutive misses at ID ${nextId - 1}`);
         return resolve();
       } else if (nextId >= endId && active.size === 0) {
         return resolve();
@@ -103,33 +123,31 @@ async function scrapeBatchJ(startId, batchSize) {
   });
 
   if (jockeys.length === 0) {
-    console.debug('⚠️ No jockeys fetched');
+    console.debug('⚠️ No jockeys fetched; nothing to save');
     return;
   }
 
-  const ndjson = jockeys.map(o => JSON.stringify(o)).join('');
-  const ts = formatDateJ(new Date());
-  const fileName = `${PREFIX_J}shard_${startId}_${startId + jockeys.length - 1}_${ts}.ndjson`;
+  // Serialize to NDJSON and save
+  const ndjson = jockeys.map(o => JSON.stringify(o)).join('\n');
+  const ts = formatDate(new Date());
+  const fileName = `${PREFIX}shard_${startId}_${startId + jockeys.length - 1}_${ts}.ndjson`;
 
   console.debug('⏳ Saving shard to', fileName);
-  await storageJ.bucket(BUCKET_NAME_J).file(fileName)
+  await storage.bucket(BUCKET_NAME).file(fileName)
     .save(ndjson, { contentType: 'application/x-ndjson' });
 
-  console.debug('✅ Saved shard:', `gs://${BUCKET_NAME_J}/${fileName}`);
-}  
-  const valid = results.slice(0,endIndex).filter(r=>r!==null);
-  if(!valid.length){console.debug('⏳ No jockeys fetched');return;}
-  const ndjson = valid.map(o=>JSON.stringify(o)).join('\n');
-  const ts = formatDateJ(new Date());
-  const fileName = `${PREFIX_J}shard_${startId}_${startId + batchSize - 1}_${ts}.ndjson`;
-  console.debug('⏳ Saving shard to', fileName);
-  await storageJ.bucket(BUCKET_NAME_J).file(fileName).save(ndjson,{contentType:'application/x-ndjson'});
-  console.debug('✅ Saved shard:',`gs://${BUCKET_NAME_J}/${fileName}`);
+  console.debug('✅ Saved shard:', `gs://${BUCKET_NAME}/${fileName}`);
+}
 
-
-(async()=>{
-  const startId = parseInt(process.argv[2],10)||1;
-  const batchSize = parseInt(process.argv[3],10)||1000;
-  try{ await scrapeBatchJ(startId,batchSize); console.debug('✅ Jockey batch complete'); }
-  catch(e){ console.error('❌ Error in jockey scrapeBatch:',e); process.exit(1);} 
+// CLI entrypoint
+(async () => {
+  const startId   = parseInt(process.argv[2], 10) || 1;
+  const batchSize = parseInt(process.argv[3], 10) || 1000;
+  try {
+    await scrapeBatch(startId, batchSize);
+    console.debug('✅ Jockey batch complete');
+  } catch (err) {
+    console.error('❌ Error in jockey scrapeBatch:', err);
+    process.exit(1);
+  }
 })();
