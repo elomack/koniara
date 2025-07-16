@@ -74,6 +74,11 @@ async function scrapeBatch(startId, batchSize) {
 
   // Launch one fetch and schedule next
   const launchOne = async id => {
+    // immediate bailout if cutoff reached
+    if (misses >= CUTOFF) {
+      active.delete(id);
+      return;
+    }
     active.add(id);
     try {
       const rec = await fetchBreederData(id);
