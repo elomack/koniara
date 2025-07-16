@@ -6,7 +6,8 @@ async function debugTrainer(id) {
     const { data } = await axios.get(
       `https://homas.pkwk.org/homas/race/search/trainer/${id}`
     );
-    console.log('FULL PAYLOAD:', JSON.stringify(data, null, 2));
+    const t = data;
+    console.log('ALFA3:', JSON.stringify(t.licenceCountry?.alfa3, null, 2));
   } catch (err) {
     console.error('Error fetching trainer', id, err.message);
   }
