@@ -12,12 +12,13 @@ const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
  */
 exports.mergeShards = async (req, res) => {
   try {
-    console.debug('➡️ mergeShards invoked with body:', req.body);
+    console.debug('✨ mergeShards invoked with body:', req.body);
     const { prefix, outputPrefix, pattern } = req.body;
     if (!prefix || !pattern || !outputPrefix) {
       console.warn('❗ Missing required fields: prefix, pattern, outputPrefix');
       return res.status(400).send('⚠️ Missing required fields: prefix, pattern, outputPrefix');
     }
+
     const bucket = storage.bucket(BUCKET);
     const regex = new RegExp(pattern);
 
@@ -30,13 +31,15 @@ exports.mergeShards = async (req, res) => {
       .sort();
 
     console.debug(`🔍 Found ${shardNames.length} shards matching pattern`);
+
+    // Handle no shards gracefully
     if (shardNames.length === 0) {
-      console.warn(`⚠️ No shards matching ${pattern} under ${prefix}`);
-      return res.status(404).send(`⚠️ No shards matching ${pattern} under ${prefix}`);
+      console.info(`ℹ️ No shards found under ${prefix} matching ${pattern}`);
+      return res.status(200).json({ mergedCount: 0, masterFile: null, message: 'No shards to merge' });
     }
 
-        // 2. Build master filename dynamically based on outputPrefix
-    const ts = new Date().toISOString().replace(/[:.]/g,'_');
+    // 2. Build master filename dynamically based on outputPrefix
+    const ts = new Date().toISOString().replace(/[:.]/g, '_');
     // derive a clean uppercase tag from outputPrefix: remove trailing slash and underscores
     const folderKey = outputPrefix.replace(/\/$/, '');
     const tag = folderKey.replace(/_/g, '').toUpperCase();
@@ -65,7 +68,7 @@ exports.mergeShards = async (req, res) => {
     }
     await new Promise((ok, ko) => {
       writeStream.end(() => {
-        console.debug('✅ Finished writing master file');
+        console.debug('✋ Finished writing master file');
         ok();
       });
       writeStream.on('error', err => {
@@ -75,13 +78,13 @@ exports.mergeShards = async (req, res) => {
     });
 
     // 4. Delete shards (commented out until prod)
-    console.debug('🗑️ Deleting shard files');
-    await Promise.all(shardNames.map(name =>
-      bucket.file(prefix + name)
-    .delete()
-    .then(() => console.debug(`✅🗑️ Deleted ${name}`))
-    .catch(err => console.warn(`⚠️ Failed to delete ${name}:`, err))
-    ));
+    // console.debug('🗑️ Deleting shard files');
+    // await Promise.all(shardNames.map(name =>
+    //   bucket.file(prefix + name)
+    //     .delete()
+    //     .then(() => console.debug(`🗑️ Deleted ${name}`))
+    //     .catch(err => console.warn(`⚠️ Failed to delete ${name}:`, err))
+    // ));
 
     console.info(`🎉 mergeShards completed. Master: ${masterName}, Count: ${shardNames.length}`);
     return res.status(200).json({ masterFile: masterName, mergedCount: shardNames.length });
