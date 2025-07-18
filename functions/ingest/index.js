@@ -223,7 +223,9 @@ exports.ingest = async (req, res) => {
     }
 
     // 6. Update watermark
-    const newLatest = newFiles.map(e => e.createdTime).sort().pop();
+    // Determine the latest processed timestamp as a JavaScript Date
+    const latestString = newFiles.map(e => e.createdTime).sort().pop();
+    const newLatest = new Date(latestString);
     await bigquery.query({
       query: `MERGE \`${METADATA_TABLE}\` M USING (SELECT @prefix AS prefix, @ts AS last_processed_time) N ON M.prefix=N.prefix WHEN MATCHED THEN UPDATE SET last_processed_time=N.last_processed_time WHEN NOT MATCHED THEN INSERT(prefix,last_processed_time) VALUES(N.prefix,N.last_processed_time)`,
       params: { prefix, ts: newLatest },
