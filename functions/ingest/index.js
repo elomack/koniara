@@ -66,7 +66,7 @@ exports.ingest = async (req, res) => {
       // Determine partition suffix by latest createdTime
       const latest = newEntries.map(e => e.createdTime).sort().pop();
       const partition = latest.slice(0,10).replace(/-/g, '');
-      const stagingId = `stg_${table}$${partition}`;
+      const stagingId = `stg_${table}_${partition}`;
       const stagingRef = `${bigquery.projectId}.${DATASET}.${stagingId}`;
       const prodRef = `${bigquery.projectId}.${DATASET}.${table}`;
       const uris = newEntries.map(e => e.uri);
