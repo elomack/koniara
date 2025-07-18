@@ -3,33 +3,42 @@
 
 main:
   params: [serviceName, startId, batchSize, batches]
-
   steps:
-    # Loop over batches (0 to batches-1)
+    # Loop over batches using count-based loop
     - batchLoop:
         loop:
-          for:
-            value: i
-            in:
-              start: 0
-              end: ${batches}
-              step: 1
-        do:
-          steps:
-            # Invoke the Cloud Run job for batch i
-            - runBatchJob:
-                call: http.post
-                args:
-                  url: ${"https://run.googleapis.com/v1/projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName + ":run"}
-                  auth:
-                    type: OAuth2
-                  body:
-                    name: ${"projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName}
-                    parameters:
-                      args:
-                        - ${startId + i * batchSize}
-                        - ${batchSize}
-                result: jobResponse
+          count: ${batches}
+        steps:
+          # Build request URLs for Cloud Run job invocation
+          - buildUrls:
+              assign:
+                - runUrl: >-
+                    ${
+                      "https://run.googleapis.com/v1/projects/"
+                        + sys.get_env("GOOGLE_CLOUD_PROJECT")
+                        + "/locations/europe-central2/jobs/" + serviceName + ":run"
+                    }
+                - jobName: >-
+                    ${
+                      "projects/"
+                        + sys.get_env("GOOGLE_CLOUD_PROJECT")
+                        + "/locations/europe-central2/jobs/" + serviceName
+                    }
+
+          # Invoke the Cloud Run job for batch index
+          - runBatchJob:
+              call: http.post
+              args:
+                url: ${runUrl}
+                auth:
+                  type: OAuth2
+                body:
+                  name: ${jobName}
+                  parameters:
+                    args:
+                      - ${startId + (index * batchSize)}
+                      - ${batchSize}
+              result: jobResponse
 
     # Return number of batches processed
     - return:
