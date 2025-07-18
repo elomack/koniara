@@ -83,7 +83,8 @@ exports.ingest = async (req, res) => {
             },
             sourceUris: uris,
             sourceFormat: 'NEWLINE_DELIMITED_JSON',
-            writeDisposition: 'WRITE_TRUNCATE'
+            writeDisposition: 'WRITE_TRUNCATE',
+            autodetect: true
           }
         }
       });
