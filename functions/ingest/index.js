@@ -62,7 +62,7 @@ exports.ingest = async (req, res) => {
       return res.status(204).send('No new files to ingest');
     }
 
-    // 4. Handle horse_data prefix with flatten
+    // 4. Handle horse_data prefix with flatten and audit fields
     if (prefix === 'horse_data/') {
       const horses = [];
       const careers = [];
@@ -76,6 +76,7 @@ exports.ingest = async (req, res) => {
         for await (const line of rl) {
           let obj;
           try { obj = JSON.parse(line); } catch { continue; }
+          const now = new Date();
           // HORSES
           horses.push({
             horse_id: obj.horse_id,
@@ -93,6 +94,8 @@ exports.ingest = async (req, res) => {
             polish_breeding: obj.polish_breeding,
             foreign_training: obj.foreign_training,
             owner_name: obj.owner_name,
+            created_date: now,
+            last_updated_date: now,
           });
           // HORSE_CAREERS
           for (const c of obj.career || []) {
@@ -106,6 +109,8 @@ exports.ingest = async (req, res) => {
               race_prize_count: c.race_prize_count,
               prize_amounts: c.prize_amounts,
               prize_currencies: c.prize_currencies,
+              created_date: now,
+              last_updated_date: now,
             });
           }
           // RACES & RACE_RECORDS
@@ -134,6 +139,8 @@ exports.ingest = async (req, res) => {
                 race_rules: r.race_rules || null,
                 payments: r.payments || null,
                 race_style: r.race_style,
+                created_date: now,
+                last_updated_date: now,
               });
               seenRaceIds.add(r.race_id);
             }
@@ -148,6 +155,8 @@ exports.ingest = async (req, res) => {
               prize_currency: r.prize_currency,
               jockey_id: r.jockey_id,
               trainer_id: r.trainer_id,
+              created_date: now,
+              last_updated_date: now,
             });
           }
         }
@@ -161,15 +170,15 @@ exports.ingest = async (req, res) => {
       ]);
       console.info('✅ horse_data flattened and ingested');
     } else {
-      // 5. Reference tables: staging, merge, drop
+      // 5. Reference tables: staging, merge, drop with audit fields
       const refTables = prefixToTables[prefix] || [];
       for (const table of refTables) {
         const dateSuffix = newFiles
           .map(e => e.createdTime)
           .sort()
           .pop()
-          .slice(0,10)
-          .replace(/-/g,'');
+          .slice(0, 10)
+          .replace(/-/g, '');
         const stagingId = `stg_${table}_${dateSuffix}`;
         const stagingRef = `${bigquery.projectId}.${DATASET}.${stagingId}`;
         const prodRef = `${bigquery.projectId}.${DATASET}.${table}`;
@@ -190,27 +199,52 @@ exports.ingest = async (req, res) => {
         await loadJob.promise();
         console.info(`✅ Loaded into staging ${stagingRef}`);
 
-        // Merge SQL logic
+        // Merge SQL logic with created/updated
         let mergeSql = '';
         if (table === 'BREEDERS') {
-          mergeSql = `MERGE \`${prodRef}\` T USING \`${stagingRef}\` S
-               ON T.breeder_id=S.breeder_id
-               WHEN MATCHED THEN UPDATE SET name=S.name,city=S.city
-               WHEN NOT MATCHED THEN INSERT(breeder_id,name,city) VALUES(S.breeder_id,S.name,S.city)`;
+          mergeSql =
+            `MERGE \`${prodRef}\` T
+             USING \`${stagingRef}\` S
+             ON T.breeder_id = S.breeder_id
+             WHEN MATCHED THEN UPDATE SET
+               name = S.name,
+               city = S.city,
+               last_updated_date = CURRENT_TIMESTAMP()
+             WHEN NOT MATCHED THEN INSERT(
+               breeder_id, name, city, created_date, last_updated_date
+             ) VALUES (
+               S.breeder_id, S.name, S.city, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+             )`;
         } else if (table === 'JOCKEYS') {
-          mergeSql = `MERGE \`${prodRef}\` T USING \`${stagingRef}\` S
-               ON T.jockey_id=S.jockey_id
-               WHEN MATCHED THEN UPDATE SET first_name
-= S.first_name,last_name=S.last_name,licence_country=S.licence_country
-               WHEN NOT MATCHED THEN INSERT(jockey_id,first_name,last_name,licence_country)
-               VALUES(S.jockey_id,S.first_name,S.last_name,S.licence_country)`;
+          mergeSql =
+            `MERGE \`${prodRef}\` T
+             USING \`${stagingRef}\` S
+             ON T.jockey_id = S.jockey_id
+             WHEN MATCHED THEN UPDATE SET
+               first_name = S.first_name,
+               last_name = S.last_name,
+               licence_country = S.licence_country,
+               last_updated_date = CURRENT_TIMESTAMP()
+             WHEN NOT MATCHED THEN INSERT(
+               jockey_id, first_name, last_name, licence_country, created_date, last_updated_date
+             ) VALUES (
+               S.jockey_id, S.first_name, S.last_name, S.licence_country, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+             )`;
         } else if (table === 'TRAINERS') {
-          mergeSql = `MERGE \`${prodRef}\` T USING \`${stagingRef}\` S
-               ON T.trainer_id=S.trainer_id
-               WHEN MATCHED THEN UPDATE SET first_name=S.first_name,last_name
-=S.last_name,licence_country=S.licence_country
-               WHEN NOT MATCHED THEN INSERT(trainer_id,first_name,last_name,licence_country)
-               VALUES(S.trainer_id,S.first_name,S.last_name,S.licence_country)`;
+          mergeSql =
+            `MERGE \`${prodRef}\` T
+             USING \`${stagingRef}\` S
+             ON T.trainer_id = S.trainer_id
+             WHEN MATCHED THEN UPDATE SET
+               first_name = S.first_name,
+               last_name = S.last_name,
+               licence_country = S.licence_country,
+               last_updated_date = CURRENT_TIMESTAMP()
+             WHEN NOT MATCHED THEN INSERT(
+               trainer_id, first_name, last_name, licence_country, created_date, last_updated_date
+             ) VALUES (
+               S.trainer_id, S.first_name, S.last_name, S.licence_country, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+             )`;
         }
         console.debug(`↗️ Merging into ${prodRef}`);
         await bigquery.query({ query: mergeSql });
@@ -223,11 +257,10 @@ exports.ingest = async (req, res) => {
     }
 
     // 6. Update watermark
-    // Determine the latest processed timestamp as a JavaScript Date
     const latestString = newFiles.map(e => e.createdTime).sort().pop();
     const newLatest = new Date(latestString);
     await bigquery.query({
-      query: `MERGE \`${METADATA_TABLE}\` M USING (SELECT @prefix AS prefix, @ts AS last_processed_time) N ON M.prefix=N.prefix WHEN MATCHED THEN UPDATE SET last_processed_time=N.last_processed_time WHEN NOT MATCHED THEN INSERT(prefix,last_processed_time) VALUES(N.prefix,N.last_processed_time)`,
+      query: `MERGE \`${METADATA_TABLE}\` M USING (SELECT @prefix AS prefix, @ts AS last_processed_time) N ON M.prefix=N.prefix WHEN MATCHED THEN UPDATE SET last_processed_time=N.last_processed_time WHEN NOT MATCHED THEN INSERT(prefix, last_processed_time) VALUES(N.prefix, N.last_processed_time)`,
       params: { prefix, ts: newLatest },
     });
     console.info('✅ Updated metadata');
