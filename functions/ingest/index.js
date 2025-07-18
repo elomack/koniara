@@ -81,18 +81,17 @@ exports.ingest = async (req, res) => {
       const prodTable = `${bigquery.projectId}.${DATASET}.${table}`;
       const uris = newEntries.map(e => e.cleanedUri);
 
-      // 4a. Load into staging
-      console.debug(`⬆️ Loading ${uris.length} files into ${stagingTable}`);
-      const [job] = await bigquery
-        .dataset(DATASET)
-        .table(stagingTableId)
-        .load(uris, {
-          sourceFormat: 'NEWLINE_DELIMITED_JSON',
-          autodetect: false,
-          writeDisposition: 'WRITE_TRUNCATE'
-        });
-      await job.promise();
-      console.info(`✅ Loaded files into ${stagingTable}`);
+      // 4a. Load into staging via createLoadJob
+      console.debug(`⬆️ Loading into staging ${stagingTable}:`, uris);
+      const [loadJob] = await bigquery.createLoadJob({
+        destination: bigquery.dataset(DATASET).table(stagingTableId),
+        sourceUris: uris,
+        sourceFormat: 'NEWLINE_DELIMITED_JSON',
+        writeDisposition: 'WRITE_TRUNCATE'
+      });
+      await loadJob.promise();
+      console.info(`✅ Loaded ${uris.length} files into ${stagingTable}`);
+
 
       // 4b. Merge staging into prod
       let mergeSql;
