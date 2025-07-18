@@ -9,6 +9,7 @@ const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
  *
  * This function scans for MASTERFILE_*.ndjson under the given prefix,
  * dedupes and strips malformed lines, and writes CLEANED_ files.
+ * Returns cleanedUri and createdTime for each file for ingestion metadata.
  */
 exports.cleanMaster = async (req, res) => {
   console.debug('ℹ️ cleanMaster invoked with body:', req.body);
@@ -27,8 +28,7 @@ exports.cleanMaster = async (req, res) => {
     // 2. Filter for master NDJSON files (exclude CLEANED_ files)
     const masters = files
       .map(f => f.name)
-      // Only files that start with MASTERFILE_ directly under the prefix
-      .filter(name => name.startsWith(prefix + 'MASTERFILE_') && name.endsWith('.ndjson'));    
+      .filter(name => name.startsWith(prefix + 'MASTERFILE_') && name.endsWith('.ndjson'));
     console.debug(`🔍 Found ${masters.length} master files under ${prefix}`);
 
     const processed = [];
@@ -45,7 +45,7 @@ exports.cleanMaster = async (req, res) => {
 
       console.debug(`➡️ Processing master file: ${masterPath}`);
 
-      // Get a reference to the master file and its read stream
+      // Streams for reading and writing
       const masterFile = bucket.file(masterPath);
       const readStream = masterFile.createReadStream();
       const writeStream = cleanedFile.createWriteStream({ contentType: 'application/x-ndjson' });
@@ -55,6 +55,7 @@ exports.cleanMaster = async (req, res) => {
       const seen = new Set();
       const rl = require('readline').createInterface({ input: readStream });
 
+      // Read, parse, dedupe
       for await (const line of rl) {
         initialCount++;
         let obj;
@@ -83,16 +84,24 @@ exports.cleanMaster = async (req, res) => {
         writeStream.on('error', err => ko(err));
       });
 
+      // Retrieve URI and creation time for metadata
+      const [metadata] = await cleanedFile.getMetadata();
+      const cleanedUri = `gs://${BUCKET}/${cleanedName}`;
+      const createdTime = metadata.timeCreated;
+
+      // Collect stats including new URI and timestamp
       processed.push({
         prefix,
         masterFile: masterPath,
         cleanedFile: cleanedName,
+        cleanedUri,
+        createdTime,
         initialCount,
         removedCount,
         finalCount: initialCount - removedCount
       });
 
-      console.info(`✅ Cleaned: ${cleanedName} | Initial: ${initialCount} | Removed: ${removedCount} | Final: ${initialCount - removedCount}`);
+      console.info(`✅ Cleaned: ${cleanedName} | Initial: ${initialCount} | Removed: ${removedCount} | Final: ${initialCount - removedCount} | Created: ${createdTime}`);
     }
 
     if (processed.length === 0) {
