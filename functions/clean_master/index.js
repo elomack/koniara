@@ -39,7 +39,7 @@ exports.cleanMaster = async (req, res) => {
       const cleanedFile = bucket.file(cleanedName);
       const [exists] = await cleanedFile.exists();
       if (exists) {
-        console.info(`⚠️ Skipping already-cleaned file: ${cleanedName}`);
+        console.debug(`⚠️ Skipping already-cleaned file: ${cleanedName}`);
         continue;
       }
 
@@ -101,7 +101,7 @@ exports.cleanMaster = async (req, res) => {
         finalCount: initialCount - removedCount
       });
 
-      console.info(`✅ Cleaned: ${cleanedName} | Initial: ${initialCount} | Removed: ${removedCount} | Final: ${initialCount - removedCount} | Created: ${createdTime}`);
+      console.debug(`✅ Cleaned: ${cleanedName} | Cleaned URI: ${cleanedUri} |Initial: ${initialCount} | Removed: ${removedCount} | Final: ${initialCount - removedCount} | Created: ${createdTime}`);
     }
 
     if (processed.length === 0) {
