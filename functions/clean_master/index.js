@@ -24,10 +24,11 @@ exports.cleanMaster = async (req, res) => {
     console.debug(`📋 Listing files under prefix: ${prefix}`);
     const [files] = await bucket.getFiles({ prefix });
 
-    // 2. Filter for master NDJSON files
+    // 2. Filter for master NDJSON files (exclude CLEANED_ files)
     const masters = files
       .map(f => f.name)
-      .filter(name => name.startsWith(prefix) && /MASTERFILE_.*\.ndjson$/.test(name));
+      // Only files that start with MASTERFILE_ directly under the prefix
+      .filter(name => name.startsWith(prefix + 'MASTERFILE_') && name.endsWith('.ndjson'));    
     console.debug(`🔍 Found ${masters.length} master files under ${prefix}`);
 
     const processed = [];
