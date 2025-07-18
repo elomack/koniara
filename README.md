@@ -53,8 +53,14 @@ Each component has its own `README.md` under `services/…` or `functions/…`.
 ```
 koniara/
 ├── ddl/                           # BigQuery CREATE OR REPLACE TABLE DDLs
-│   ├── updated_ddls_with_timestamps.sql
-│   └── ingestion_metadata.sql
+│   ├── BREEDERS.sql
+│   ├── HORSE_CAREERS.sql
+│   ├── HORSES.sql
+│   ├── ingestion_metadata.sql
+│   ├── JOCKEYS.sql
+│   ├── RACE_RECORDS.sql
+│   ├── RACES.sql
+│   └── TRAINERS.sql
 │
 ├── services/                      # Cloud Run jobs
 │   ├── horse_data_scraper-v2/
