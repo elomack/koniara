@@ -1,20 +1,12 @@
 # 🐴 Koniara: End-to-End Horse Racing Data Pipeline
 
-This repository contains a modular, GCP-native pipeline for scraping, merging, cleaning, and ingesting horse racing data from the public Homas API into BigQuery. It’s composed of:
+This repo implements a fully automated, GCP-native pipeline for scraping, merging, cleaning and ingesting horse racing data into BigQuery. The stages are:
 
-- **Services** (Cloud Run jobs) for batch scraping:  
-  - `horse_data_scraper-v2/` 🐎  
-  - `breeder_scraper-v2/` 🐄  
-  - `jockey_scraper-v2/` 🏇  
-  - `trainer_scraper-v2/` 🧑‍🌾  
-
-- **Functions** for shard management and cleaning:  
-  - `merge_shards/` 🔗 — HTTP Cloud Function to concatenate NDJSON shards  
-  - `clean_master/` 🧹 — Cloud Run job to drop malformed JSON & dedupe  
-
-- **Ingestion** (Cloud Run) to load cleaned NDJSON into BigQuery staging & upsert into target tables.
-
-- **Workflows** for orchestration (to be implemented): end-to-end chaining of scrape → merge → clean → ingest.
+1. **Scrape** public API for Horse / Breeder / Jockey / Trainer records (Cloud Run jobs)  
+2. **Merge** per-entity NDJSON shards into a single “master” file (`mergeShards` Cloud Function)  
+3. **Clean** the master file: drop malformed lines & dedupe (`cleanMaster` Cloud Run job)  
+4. **Ingest** cleaned NDJSON into BigQuery—flattening arrays for `horse_data/` and upserting reference tables via staging+MERGE (`ingest` Cloud Function)  
+5. **(Planned)** Orchestrate end-to-end via Cloud Workflows & Cloud Scheduler  
 
 ---
 
@@ -24,39 +16,35 @@ This repository contains a modular, GCP-native pipeline for scraping, merging, c
 2. [Getting Started](#getting-started)  
 3. [Directory Layout](#directory-layout)  
 4. [Prerequisites](#prerequisites)  
-5. [Deploying Components](#deploying-components)  
-6. [Testing & Monitoring](#testing-monitoring)  
-7. [Next Steps](#next-steps)  
+5. [BigQuery DDLs](#bigquery-ddls)  
+6. [Deploying Components](#deploying-components)  
+7. [Testing & Monitoring](#testing-monitoring)  
+8. [Next Steps](#next-steps)  
 
 ---
 
 ## Architecture & Flow
 
 ```text
-┌────────┐   scrape   ┌────────┐   merge   ┌─────────┐   clean   ┌─────────┐   ingest   ┌────────┐
-│ Client │ ─────────> │ Scraper│ ───────> │ merge-  │ ───────> │ clean-  │ ───────> │ Ingest │
-│        │            │ (Run)  │          │ shards  │          │ master  │          │ (Run)  │
-└────────┘            └────────┘          └─────────┘          └─────────┘          └────────┘
+Scrape ──▶ Merge ──▶ Clean ──▶ Ingest ──▶ BigQuery
+   (Run)     (Fn)      (Run)      (Fn)
 ````
 
-1. **Scrape** in small batches (1,000 IDs) with 10× concurrency, halt after 10× 404s.
-2. **Merge** per-entity shards into one NDJSON (`mergeShards`).
-3. **Clean** the merged file: drop malformed lines & duplicates (`cleanMaster`).
-4. **Ingest** cleaned NDJSON into BigQuery (staging→MERGE).
-5. (Planned) **Orchestrate** via Cloud Workflows & Cloud Scheduler.
+* **Scrape**: batch-parallel jobs (1 000 IDs at a time, 10× concurrency, stop on 10× 404s)
+* **Merge**: `mergeShards` HTTP Cloud Function concatenates all `shard_*.ndjson` into a single MASTERFILE
+* **Clean**: `cleanMaster` Cloud Run job strips invalid JSON, dedupes, writes `CLEANED_…` files
+* **Ingest**: `ingest` HTTP Cloud Function discovers new cleansed files, flattens `horse_data/` arrays, upserts reference tables
 
 ---
 
 ## Getting Started
-
-Clone the repo and choose a component:
 
 ```bash
 git clone https://github.com/elomack/koniara.git
 cd koniara
 ```
 
-Then follow that component’s `README.md` under `services/…` or `functions/…` for detailed build & deploy instructions.
+Each component has its own `README.md` under `services/…` or `functions/…`.
 
 ---
 
@@ -64,103 +52,164 @@ Then follow that component’s `README.md` under `services/…` or `functions/�
 
 ```
 koniara/
-├── services/
+├── ddl/                           # BigQuery CREATE OR REPLACE TABLE DDLs
+│   ├── updated_ddls_with_timestamps.sql
+│   └── ingestion_metadata.sql
+│
+├── services/                      # Cloud Run jobs
 │   ├── horse_data_scraper-v2/
 │   ├── breeder_scraper-v2/
 │   ├── jockey_scraper-v2/
-│   ├── trainer_scraper-v2/
-│   └── data_ingestion_service/
-│       └── src/
-│           ├── index.js         # ingestion logic
-│           └── cleanMaster.js   # NDJSON cleaner
-├── functions/
-│   └── merge_shards/
-│       └── index.js             # mergeShards Cloud Function
-├── workflows/
-│   └── horse-pipeline-full.yaml # (planned) Cloud Workflow definition
-└── README.md                    # ← you are here
+│   └── trainer_scraper-v2/
+│
+├── functions/                     # HTTP-triggered Cloud Functions
+│   ├── merge_shards/              # mergeShards()
+│   ├── clean_master/              # cleanMaster()
+│   └── ingest/                    # ingest()
+│
+├── workflows/                     # (Planned) Cloud Workflows definitions
+│   └── horse-pipeline-full.yaml
+│
+└── README.md                      # ← you are here
 ```
 
 ---
 
 ## Prerequisites
 
-* **GCP project** with:
+* **GCP project** with APIs enabled:
 
-  * Cloud Run, Cloud Functions, Cloud Workflows APIs enabled
-  * IAM roles: Cloud Run Admin, Cloud Functions Developer, Storage Admin, BigQuery Admin
-* **Node.js 20.x** & **Docker**
-* **gcloud CLI** authenticated to your project
+  * Cloud Run, Cloud Functions, BigQuery, Cloud Workflows
+* **IAM roles**: Cloud Functions Developer, Cloud Run Admin, Storage Admin, BigQuery Admin
+* **Node.js 20**, **Docker**, **gcloud CLI**
+
+---
+
+## BigQuery DDLs
+
+All table schemas live in `ddl/`. Run them in order to (re)create:
+
+```bash
+# Drop old tables (optional)
+PROJECT=horse-predictor-v2
+DATASET=horse_data_v2
+for T in HORSES HORSE_CAREERS RACES RACE_RECORDS BREEDERS JOCKEYS TRAINERS ingestion_metadata; do
+  bq rm -f -t ${PROJECT}:${DATASET}.$T
+done
+
+# Create new schemas—with audit fields and descriptions
+bq query --use_legacy_sql=false < ddl/updated_ddls_with_timestamps.sql
+bq query --use_legacy_sql=false < ddl/ingestion_metadata.sql
+```
+
+Each table now includes:
+
+* `created_date TIMESTAMP` – set once on row insertion
+* `last_updated_date TIMESTAMP` – updated on every upsert
+* Column descriptions via `OPTIONS(description="…")`
 
 ---
 
 ## Deploying Components
 
-Each component has its own `README.md`. In general:
+### 1. Scraper Services (Cloud Run jobs)
 
-1. **Scraper Services**
+```bash
+cd services/horse_data_scraper-v2
+npm install
+docker build -t gcr.io/$PROJECT_ID/horse-scraper:v1 .
+docker push gcr.io/$PROJECT_ID/horse-scraper:v1
+gcloud run jobs deploy horse-scraper-job \
+  --image=gcr.io/$PROJECT_ID/horse-scraper:v1 \
+  --region=europe-central2 \
+  --max-retries=3
+```
 
-   ```bash
-   cd services/horse_data_scraper-v2
-   npm install
-   docker build -t gcr.io/$PROJECT_ID/horse-scraper:v1 .
-   docker push gcr.io/$PROJECT_ID/horse-scraper:v1
-   gcloud run jobs deploy horse-scraper-job \
-     --image=gcr.io/$PROJECT_ID/horse-scraper:v1 \
-     ... (flags vary per service)
-   ```
+Repeat for breeder/jockey/trainer scrapers.
 
-2. **mergeShards Function**
+---
 
-   ```bash
-   cd functions/merge_shards
-   npm install
-   gcloud functions deploy mergeShards \
-     --region=europe-central2 \
-     --runtime=nodejs20 \
-     --trigger-http \
-     --entry-point=mergeShards \
-     --set-env-vars=BUCKET_NAME=$BUCKET
-   ```
+### 2. mergeShards Function
 
-3. **cleanMaster Job**
+```bash
+cd functions/merge_shards
+npm install
+gcloud functions deploy mergeShards \
+  --region=europe-central2 \
+  --runtime=nodejs20 \
+  --trigger-http \
+  --entry-point=mergeShards \
+  --source=. \
+  --set-env-vars=BUCKET_NAME=$BUCKET_NAME \
+  --allow-unauthenticated
+```
 
-   ```bash
-   cd services/data_ingestion_service
-   npm install
-   docker build -t gcr.io/$PROJECT_ID/clean-master-job:v1 .
-   docker push gcr.io/$PROJECT_ID/clean-master-job:v1
-   gcloud run jobs deploy clean-master-job ...
-   ```
+---
 
-4. **BigQuery Ingestion**
+### 3. cleanMaster Job
 
-   * See `services/data_ingestion_service/src/index.js` for staging & MERGE logic.
+```bash
+cd functions/clean_master
+npm install
+gcloud run jobs deploy clean-master-job \
+  --image=gcr.io/$PROJECT_ID/clean-master-job:v1 \
+  --region=europe-central2 \
+  --max-retries=1
+```
+
+---
+
+### 4. ingest Function
+
+```bash
+cd functions/ingest
+npm install
+gcloud functions deploy ingest \
+  --region=europe-central2 \
+  --runtime=nodejs20 \
+  --trigger-http \
+  --entry-point=ingest \
+  --source=. \
+  --set-env-vars=BUCKET_NAME=$BUCKET_NAME,BQ_DATASET=$BQ_DATASET \
+  --allow-unauthenticated
+```
 
 ---
 
 ## Testing & Monitoring
 
-* **Local**: run each `index.js` with test IDs.
-* **Cloud Run & Functions** logs:
+* **mergeShards**:
 
   ```bash
-  gcloud run jobs logs read <job-name> --region=...  
-  gcloud functions logs read mergeShards --region=...
+  gcloud functions call mergeShards \
+    --region=europe-central2 \
+    --data='{"prefix":"horse_data/","outputPrefix":"horse_data/","pattern":"^shard_.*\\.ndjson$"}'
   ```
-* **Logs-based metrics**: count “❌” errors or “⚠️ Miss” entries.
-* **Alerts**: configure in Cloud Monitoring.
+* **cleanMaster**:
+
+  ```bash
+  gcloud functions call cleanMaster \
+    --region=europe-central2 \
+    --data='{"prefix":"horse_data/"}'
+  ```
+* **ingest**:
+
+  ```bash
+  gcloud functions call ingest \
+    --region=europe-central2 \
+    --data='{"prefix":"horse_data/"}'
+  ```
+
+Logs & metrics in Cloud Logging / Monitoring; alerts on ERROR entries.
 
 ---
 
 ## Next Steps
 
-1. **Build & validate** the `cleanMaster` and ingestion jobs end-to-end.
-2. **Create mini-Workflows** for each data type: scraper→merge→clean→ingest.
-3. **Compose full orchestrator** in `workflows/horse-pipeline-full.yaml`.
-4. **Schedule** via Cloud Scheduler.
-5. **Cleanup**: enable shard deletion, finalize IAM, add alerts.
+1. Build per-entity Cloud Workflows chaining scrape→merge→clean→ingest
+2. Schedule weekly with Cloud Scheduler
+3. Harden production: shard deletion, IAM lockdown, alerts
 
-> **Guiding principle**: “Lock down your core transforms first, then compose the full Workflow once each stage is hardened.”
+> **Principle**: Lock down core transforms first, then orchestrate once each stage is validated.
 
-```
+---
