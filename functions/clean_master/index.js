@@ -43,6 +43,8 @@ exports.cleanMaster = async (req, res) => {
       }
 
       console.debug(`➡️ Processing master file: ${masterPath}`);
+
+      // Get a reference to the master file and its read stream
       const masterFile = bucket.file(masterPath);
       const readStream = masterFile.createReadStream();
       const writeStream = cleanedFile.createWriteStream({ contentType: 'application/x-ndjson' });
@@ -71,6 +73,7 @@ exports.cleanMaster = async (req, res) => {
         writeStream.write(repr + '\n');
       }
 
+      // Finalize write stream
       await new Promise((ok, ko) => {
         writeStream.end(() => {
           console.debug('✋ Finished writing cleaned file');
