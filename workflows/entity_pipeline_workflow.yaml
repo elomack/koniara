@@ -5,35 +5,32 @@ main:
   params: [serviceName, startId, batchSize, batches]
 
   steps:
-    # Initialize batch counter
-    - init:
-        assign:
-          - i: 0
-
-    # Loop until we have processed all batches
+    # Loop over batches (0 to batches-1)
     - batchLoop:
-        while: ${i < batches}
-        steps:
-          # Invoke the Cloud Run job for one batch
-          - runBatchJob:
-              call: http.post
-              args:
-                url: ${"https://run.googleapis.com/v1/projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName + ":run"}
-                auth:
-                  type: OAuth2
-                body:
-                  name: ${"projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName}
-                  parameters:
-                    args:
-                      - ${startId + i * batchSize}
-                      - ${batchSize}
-              result: jobResponse
-
-          # Increment batch counter
-          - increment:
-              assign:
-                - i: ${i + 1}
+        loop:
+          for:
+            value: i
+            in:
+              start: 0
+              end: ${batches}
+              step: 1
+        do:
+          steps:
+            # Invoke the Cloud Run job for batch i
+            - runBatchJob:
+                call: http.post
+                args:
+                  url: ${"https://run.googleapis.com/v1/projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName + ":run"}
+                  auth:
+                    type: OAuth2
+                  body:
+                    name: ${"projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName}
+                    parameters:
+                      args:
+                        - ${startId + i * batchSize}
+                        - ${batchSize}
+                result: jobResponse
 
     # Return number of batches processed
     - return:
-        return: ${i}
+        return: ${batches}
