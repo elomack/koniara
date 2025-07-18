@@ -1,0 +1,10 @@
+{
+  "name": "ingest",
+  "version": "1.0.0",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/storage": "^6.9.0",
+    "@google-cloud/bigquery": "^6.0.0"
+  },
+  "engines": { "node": ">=18" }
+}
