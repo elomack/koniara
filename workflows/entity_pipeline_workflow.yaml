@@ -1,0 +1,39 @@
+# entity_pipeline_workflow.yaml
+# Sub-workflow: loop over batches and invoke a single Cloud Run Job per batch
+
+main:
+  params: [serviceName, startId, batchSize, batches]
+
+  steps:
+    # Initialize batch counter
+    - init:
+        assign:
+          - i: 0
+
+    # Loop until we have processed all batches
+    - batchLoop:
+        while: ${i < batches}
+        steps:
+          # Invoke the Cloud Run job for one batch
+          - runBatchJob:
+              call: http.post
+              args:
+                url: ${"https://run.googleapis.com/v1/projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName + ":run"}
+                auth:
+                  type: OAuth2
+                body:
+                  name: ${"projects/" + sys.get_env("GOOGLE_CLOUD_PROJECT") + "/locations/europe-central2/jobs/" + serviceName}
+                  parameters:
+                    args:
+                      - ${startId + i * batchSize}
+                      - ${batchSize}
+              result: jobResponse
+
+          # Increment batch counter
+          - increment:
+              assign:
+                - i: ${i + 1}
+
+    # Return number of batches processed
+    - return:
+        return: ${i}
