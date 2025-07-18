@@ -4,35 +4,37 @@ const storage = new Storage();
 const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
 
 /**
- * HTTP trigger parameters (none required).
- * This function will scan for master files under each scraper prefix,
- * dedupe and strip malformed lines, and write CLEANED_ files.
+ * HTTP trigger parameters:
+ *   prefix (string) – folder containing merged master files to process, e.g. 'horse_data/'. Required.
+ *
+ * This function scans for MASTERFILE_*.ndjson under the given prefix,
+ * dedupes and strips malformed lines, and writes CLEANED_ files.
  */
 exports.cleanMaster = async (req, res) => {
-  console.debug('ℹ️ cleanMaster invoked');
+  console.debug('ℹ️ cleanMaster invoked with body:', req.body);
   try {
+    const { prefix } = req.body;
+    if (!prefix || typeof prefix !== 'string') {
+      console.warn('❗ Missing or invalid required field: prefix');
+      return res.status(400).send('⚠️ Missing or invalid required field: prefix');
+    }
     const bucket = storage.bucket(BUCKET);
 
-    // 1. List all master NDJSON files
-    console.debug('📋 Listing all files in bucket');
-    const [files] = await bucket.getFiles();
+    // 1. List all files under specified prefix
+    console.debug(`📋 Listing files under prefix: ${prefix}`);
+    const [files] = await bucket.getFiles({ prefix });
 
-    // Filter master NDJSON files created by mergeShards
+    // 2. Filter for master NDJSON files
     const masters = files
       .map(f => f.name)
-      .filter(name => /MASTERFILE_.*\.ndjson$/.test(name));
+      .filter(name => name.startsWith(prefix) && /MASTERFILE_.*\.ndjson$/.test(name));
+    console.debug(`🔍 Found ${masters.length} master files under ${prefix}`);
 
-    console.debug(`🔍 Found ${masters.length} master files`);
-    let processed = [];
-
+    const processed = [];
     for (const masterPath of masters) {
-      // Derive cleaned filename
-      const parts = masterPath.split('/');
-      const fileName = parts.pop();
-      const dir = parts.join('/') + (parts.length ? '/' : '');
-      const cleanedName = `${dir}CLEANED_${fileName}`;
+      const fileName = masterPath.substring(prefix.length);
+      const cleanedName = `${prefix}CLEANED_${fileName}`;
 
-      // Check if already cleaned
       const cleanedFile = bucket.file(cleanedName);
       const [exists] = await cleanedFile.exists();
       if (exists) {
@@ -42,9 +44,6 @@ exports.cleanMaster = async (req, res) => {
 
       console.debug(`➡️ Processing master file: ${masterPath}`);
       const masterFile = bucket.file(masterPath);
-      const [masterStream] = masterFile;
-
-      // Read file content line-by-line
       const readStream = masterFile.createReadStream();
       const writeStream = cleanedFile.createWriteStream({ contentType: 'application/x-ndjson' });
 
@@ -54,9 +53,8 @@ exports.cleanMaster = async (req, res) => {
       const rl = require('readline').createInterface({ input: readStream });
 
       for await (const line of rl) {
-        let obj;
         initialCount++;
-        // Try parse JSON
+        let obj;
         try {
           obj = JSON.parse(line);
         } catch (err) {
@@ -64,20 +62,15 @@ exports.cleanMaster = async (req, res) => {
           removedCount++;
           continue;
         }
-
         const repr = JSON.stringify(obj);
-        // Dedup logic
         if (seen.has(repr)) {
           removedCount++;
           continue;
         }
         seen.add(repr);
-
-        // Write valid & unique line
         writeStream.write(repr + '\n');
       }
 
-      // Finalize write
       await new Promise((ok, ko) => {
         writeStream.end(() => {
           console.debug('✋ Finished writing cleaned file');
@@ -87,6 +80,7 @@ exports.cleanMaster = async (req, res) => {
       });
 
       processed.push({
+        prefix,
         masterFile: masterPath,
         cleanedFile: cleanedName,
         initialCount,
@@ -98,12 +92,12 @@ exports.cleanMaster = async (req, res) => {
     }
 
     if (processed.length === 0) {
-      console.warn('⚠️ No fresh masterfiles found');
-      return res.status(204).send('No fresh master files to clean');
+      console.warn(`⚠️ No fresh master files found under ${prefix}`);
+      return res.status(204).send(`No fresh master files to clean under ${prefix}`);
     }
 
-    // Return stats for newly cleaned files
-    return res.status(200).json({ processed });
+    // Return stats for newly cleaned files including prefix for workflow chaining
+    return res.status(200).json({ prefix, processed });
 
   } catch (err) {
     console.error('❌ cleanMaster error:', err);
