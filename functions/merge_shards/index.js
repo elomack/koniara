@@ -12,7 +12,7 @@ const BUCKET = process.env.BUCKET_NAME; // e.g. 'horse-predictor-v2-data'
  */
 exports.mergeShards = async (req, res) => {
   try {
-    console.debug('✨ mergeShards invoked with body:', req.body);
+    console.debug('ℹ️ mergeShards invoked with body:', req.body);
     const { prefix, outputPrefix, pattern } = req.body;
     if (!prefix || !pattern || !outputPrefix) {
       console.warn('❗ Missing required fields: prefix, pattern, outputPrefix');
