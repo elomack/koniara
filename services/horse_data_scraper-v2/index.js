@@ -253,8 +253,8 @@ async function scrapeBatch(startId, batchSize) {
 
 // CLI entrypoint
 (async () => {
-  const startId = parseInt(process.argv[2], 10) || 1;
-  const batchSize = parseInt(process.argv[3], 10) || 1000;
+  const startId = parseInt(process.argv[2], 10);
+  const batchSize = parseInt(process.argv[3], 10);
   try {
     await scrapeBatch(startId, batchSize);
     console.debug('✅ Batch complete');
