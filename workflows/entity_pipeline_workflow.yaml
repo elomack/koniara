@@ -2,44 +2,45 @@
 # Sub-workflow: loop over batches and invoke a single Cloud Run Job per batch
 
 main:
-  params: [serviceName, startId, batchSize, batches]
+  params: [payload]
   steps:
-    # Loop over batches using count-based loop
+    # [0] Initialize project and region
+    - init_vars:
+        assign:
+          - projectId: "horse-predictor-v2"
+          - region:    "europe-central2"
+
+    # [1] Loop over batches (0 to payload.batches-1)
     - batchLoop:
-        loop:
-          count: ${batches}
-        steps:
-          # Build request URLs for Cloud Run job invocation
-          - buildUrls:
-              assign:
-                - runUrl: >-
-                    ${
-                      "https://run.googleapis.com/v1/projects/"
-                        + sys.get_env("GOOGLE_CLOUD_PROJECT")
-                        + "/locations/europe-central2/jobs/" + serviceName + ":run"
-                    }
-                - jobName: >-
-                    ${
-                      "projects/"
-                        + sys.get_env("GOOGLE_CLOUD_PROJECT")
-                        + "/locations/europe-central2/jobs/" + serviceName
-                    }
+        for:
+          value: i
+          range:
+            - 0
+            - ${payload.batches - 1}
+          steps:
+            # [1a] Build request URLs for Cloud Run job invocation
+            - buildUrls:
+                assign:
+                  - runUrl: >-
+                      ${
+                        "https://run.googleapis.com/v1/projects/" + projectId +
+                        "/locations/" + region + "/jobs/" + payload.serviceName + ":run"
+                      }
+                  - jobName: >-
+                      ${
+                        "projects/" + projectId +
+                        "/locations/" + region + "/jobs/" + payload.serviceName
+                      }
 
-          # Invoke the Cloud Run job for batch index
-          - runBatchJob:
-              call: http.post
-              args:
-                url: ${runUrl}
-                auth:
-                  type: OAuth2
-                body:
-                  name: ${jobName}
-                  parameters:
-                    args:
-                      - ${startId + (index * batchSize)}
-                      - ${batchSize}
-              result: jobResponse
+            # [1b] Invoke the Cloud Run job for batch 'i'
+            - runBatchJob:
+                call: googleapis.run.v1.namespaces.jobs.run
+                args:
+                  name: ${"namespaces/" + projectId + "/jobs/" + payload.serviceName}
+                  location: ${region}
+                  body: {}
+                result: jobResponse
 
-    # Return number of batches processed
+    # [2] Return total batches processed
     - return:
-        return: ${batches}
+        return: ${payload.batches}
