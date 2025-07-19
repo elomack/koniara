@@ -9,6 +9,11 @@ main:
         assign:
           - projectId: "horse-predictor-v2"
           - region:    "europe-central2"
+    - log_init:
+        call: sys.log
+        args:
+          text: "🔧 Initialized projectId=${projectId}, region=${region}"
+          severity: INFO
 
     # [1] Loop over batches (0 to payload.batches-1)
     - batchLoop:
@@ -18,7 +23,14 @@ main:
             - 0
             - ${payload.batches - 1}
           steps:
-            # [1a] Build request URLs for Cloud Run job invocation
+            # [1a] Log start of iteration
+            - log_iteration_start:
+                call: sys.log
+                args:
+                  text: "➡️ Batch ${i + 1}/${payload.batches}: startId=${payload.startId + i * payload.batchSize}, batchSize=${payload.batchSize}"
+                  severity: INFO
+
+            # [1b] Build Cloud Run invocation
             - buildUrls:
                 assign:
                   - runUrl: >-
@@ -31,16 +43,36 @@ main:
                         "projects/" + projectId +
                         "/locations/" + region + "/jobs/" + payload.serviceName
                       }
+            - log_urls:
+                call: sys.log
+                args:
+                  text: "🔗 URL=${runUrl}"
+                  severity: DEBUG
 
-            # [1b] Invoke the Cloud Run job for batch 'i'
+            # [1c] Invoke the scraper job
             - runBatchJob:
                 call: googleapis.run.v1.namespaces.jobs.run
                 args:
                   name: ${"namespaces/" + projectId + "/jobs/" + payload.serviceName}
                   location: ${region}
-                  body: {}
+                  body:
+                    overrides:
+                      containerOverrides:
+                        - args:
+                            - ${ string(payload.startId + i * payload.batchSize) }
+                            - ${ string(payload.batchSize) }
                 result: jobResponse
+            - log_job_resp:
+                call: sys.log
+                args:
+                  text: "✅ Job response: ${jobResponse.status.name || jobResponse.status.code}"
+                  severity: INFO
 
-    # [2] Return total batches processed
+    # [2] Completion log and return
+    - log_done:
+        call: sys.log
+        args:
+          text: "🏁 Completed ${payload.batches} batches for ${payload.serviceName}"
+          severity: INFO
     - return:
         return: ${payload.batches}
