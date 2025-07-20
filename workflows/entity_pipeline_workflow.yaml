@@ -107,7 +107,7 @@ main:
         call: sys.log
         args:
           text: >-
-            ${"🏁 Completed " + string(batches) + " batches for " + serviceName}
+            ${"🏁 Completed " + string(batches) + " batches for " + serviceName + " up to ingestion into BigQuery."}
           severity: INFO
 
     # [5] Return batches processed

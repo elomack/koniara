@@ -106,6 +106,7 @@ function normalizeRacesData(raw) {
     trainer_id:       r.trainer?.id || null,
     race_number:       r.race?.number || null,
     race_name:         r.race?.name || null,
+    video_url:    r.race?.video || null,
     race_date:         r.race?.date || null,
     track_distance_m:  r.race?.trackDistance || null,
     temperature_c:     r.race?.temperature || null,
