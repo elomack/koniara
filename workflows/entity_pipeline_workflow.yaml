@@ -90,7 +90,18 @@ main:
             prefix: ${prefix}
         result: cleanResp
 
-    # [5] Completion log
+    # [5] Ingest cleaned data into BigQuery
+    - ingest:
+        call: http.post
+        args:
+          url: ${payload.ingestUrl}
+          auth:
+            type: OIDC
+          body:
+            prefix: ${prefix}
+        result: ingestResp
+
+    # [6] Completion log
 
     - log_done:
         call: sys.log
