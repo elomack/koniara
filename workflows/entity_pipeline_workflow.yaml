@@ -79,7 +79,19 @@ main:
             pattern: '^shard_.*\.ndjson$'
         result: mergeResp
 
-    # [4] Completion log
+        # [4] Clean and dedupe merged masterfile
+    - clean:
+        call: http.post
+        args:
+          url: ${payload.cleanUrl}
+          auth:
+            type: OIDC
+          body:
+            prefix: ${prefix}
+        result: cleanResp
+
+    # [5] Completion log
+
     - log_done:
         call: sys.log
         args:
