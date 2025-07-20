@@ -4,75 +4,72 @@
 main:
   params: [payload]
   steps:
-    # [0] Initialize project and region
+    # Initialization of variables
     - init_vars:
         assign:
           - projectId: "horse-predictor-v2"
           - region:    "europe-central2"
+          - batches:   ${int(payload.batches)}
+          - batchSize: ${int(payload.batchSize)}
+          - startId:   ${int(payload.startId)}
+          - serviceName: ${payload.serviceName}
+
+    # Log start
     - log_init:
         call: sys.log
         args:
-          text: "🔧 Initialized projectId=${projectId}, region=${region}"
+          text: >-
+            ${"🔧 Starting pipeline: service=" + serviceName
+              + ", batches=" + string(batches)
+              + ", batchSize=" + string(batchSize)
+              + ", startId=" + string(startId)}
           severity: INFO
 
-    # [1] Loop over batches (0 to payload.batches-1)
+    # Batch loop
     - batchLoop:
         for:
           value: i
           range:
             - 0
-            - ${payload.batches - 1}
+            - ${batches - 1}
           steps:
-            # [1a] Log start of iteration
-            - log_iteration_start:
+            - log_iteration:
                 call: sys.log
                 args:
-                  text: "➡️ Batch ${i + 1}/${payload.batches}: startId=${payload.startId + i * payload.batchSize}, batchSize=${payload.batchSize}"
+                  text: >-
+                    ${"➡️ Batch " + string(i + 1) + "/" + string(batches)
+                      + " (startId=" + string(startId + i * batchSize)
+                      + ", batchSize=" + string(batchSize) + ")"}
                   severity: INFO
 
-            # [1b] Build Cloud Run invocation
-            - buildUrls:
-                assign:
-                  - runUrl: >-
-                      ${
-                        "https://run.googleapis.com/v1/projects/" + projectId +
-                        "/locations/" + region + "/jobs/" + payload.serviceName + ":run"
-                      }
-                  - jobName: >-
-                      ${
-                        "projects/" + projectId +
-                        "/locations/" + region + "/jobs/" + payload.serviceName
-                      }
-            - log_urls:
-                call: sys.log
-                args:
-                  text: "🔗 URL=${runUrl}"
-                  severity: DEBUG
-
-            # [1c] Invoke the scraper job
-            - runBatchJob:
+            - run_batch_job:
                 call: googleapis.run.v1.namespaces.jobs.run
                 args:
-                  name: ${"namespaces/" + projectId + "/jobs/" + payload.serviceName}
+                  name: ${"namespaces/" + projectId + "/jobs/" + serviceName}
                   location: ${region}
                   body:
                     overrides:
                       containerOverrides:
                         - args:
-                            - ${ string(payload.startId + i * payload.batchSize) }
-                            - ${ string(payload.batchSize) }
-                result: jobResponse
+                            - ${string(startId + i * batchSize)}
+                            - ${string(batchSize)}
+                result: jobResp
+
             - log_job_resp:
                 call: sys.log
                 args:
-                  text: "✅ Job response: ${jobResponse.status.name || jobResponse.status.code}"
+                  text: >-
+                    ${"✅ Job invoked: " + jobResp.metadata.name}
                   severity: INFO
 
-    # [2] Completion log and return
+    # Completion log
     - log_done:
         call: sys.log
         args:
-          text: "🏁 Completed ${payload.batches} batches for ${payload.serviceName}"
+          text: >-
+            ${"🏁 Completed " + string(batches) + " batches for " + serviceName}
           severity: INFO
+
+    # Return number of batches processed
     - return:
-        return: ${payload.batches}
+        return: ${batches}
