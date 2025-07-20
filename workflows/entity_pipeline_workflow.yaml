@@ -4,7 +4,7 @@
 main:
   params: [payload]
   steps:
-    # Initialization of variables
+    # [0] Initialization of variables
     - init_vars:
         assign:
           - projectId: "horse-predictor-v2"
@@ -13,8 +13,9 @@ main:
           - batchSize: ${int(payload.batchSize)}
           - startId:   ${int(payload.startId)}
           - serviceName: ${payload.serviceName}
+          - prefix:    ${payload.prefix}
 
-    # Log start
+    # [1] Log start
     - log_init:
         call: sys.log
         args:
@@ -25,7 +26,7 @@ main:
               + ", startId=" + string(startId)}
           severity: INFO
 
-    # Batch loop
+    # [2] Batch loop
     - batchLoop:
         for:
           value: i
@@ -33,6 +34,7 @@ main:
             - 0
             - ${batches - 1}
           steps:
+            # [2a] Log iteration
             - log_iteration:
                 call: sys.log
                 args:
@@ -42,6 +44,7 @@ main:
                       + ", batchSize=" + string(batchSize) + ")"}
                   severity: INFO
 
+            # [2b] Run scraper job
             - run_batch_job:
                 call: googleapis.run.v1.namespaces.jobs.run
                 args:
@@ -55,6 +58,7 @@ main:
                             - ${string(batchSize)}
                 result: jobResp
 
+            # [2c] Log job invocation
             - log_job_resp:
                 call: sys.log
                 args:
@@ -62,7 +66,20 @@ main:
                     ${"✅ Job invoked: " + jobResp.metadata.name}
                   severity: INFO
 
-    # Completion log
+    # [3] Merge shards for this prefix
+    - merge:
+        call: http.post
+        args:
+          url: ${payload.mergeUrl}
+          auth:
+            type: OIDC
+          body:
+            prefix: ${prefix}
+            outputPrefix: ${prefix}
+            pattern: '^shard_.*\.ndjson$'
+        result: mergeResp
+
+    # [4] Completion log
     - log_done:
         call: sys.log
         args:
@@ -70,6 +87,6 @@ main:
             ${"🏁 Completed " + string(batches) + " batches for " + serviceName}
           severity: INFO
 
-    # Return number of batches processed
+    # [5] Return batches processed
     - return:
         return: ${batches}
