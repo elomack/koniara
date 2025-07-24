@@ -31,9 +31,9 @@ SELECT
   win_pct_2000,
   win_pct_delta_rain,
   avg_place_delta_temp,
-  sire_race_count,
-  sire_win_count,
-  sire_win_pct,
+  father_race_count,
+  father_win_count,
+  father_win_pct,
 
   -- Categoricals
   temp_bucket,
