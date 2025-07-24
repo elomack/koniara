@@ -64,11 +64,33 @@ function normalizeCareerData(raw) {
     } else if (lastKey) {
       const entry = map.get(lastKey);
       if (rec.prize) {
+        // 1. Split the incoming text, e.g. "5000 zł" or "2000 €"
         const parts = rec.prize.trim().split(/\s+/);
-        const amount = parts[0];
-        const currency = parts[1] || '';
-        entry.prize_amounts.push(amount);
-        entry.prize_currencies.push(currency);
+        // 2. Parse the numeric part:
+        const rawAmount = parseFloat(parts[0].replace(',', '.'));
+        // 3. Identify currency (normalize to lowercase to be safe):
+        const curr = (parts[1] || '').toLowerCase();
+
+        // 4. Convert everything to PLN
+        let amountPLN;
+        if (curr === '€' || curr === 'eur') {
+          // apply EUR→PLN rate
+          amountPLN = rawAmount * 4.25;
+        } else {
+          // treat all others (including 'zł', 'pln', or missing) as PLN
+          amountPLN = rawAmount;
+        }
+
+        // 5. Initialize the sum field if needed
+        if (entry.prize_amounts == null) {
+          entry.prize_amounts = 0;
+        }
+
+        // 6. Add to the running total
+        entry.prize_amounts += amountPLN;
+
+        // 7. Always record the currency as PLN from now on
+        entry.prize_currencies = 'PLN';
       }
     }
   }

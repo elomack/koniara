@@ -155,8 +155,9 @@ WITH base AS (
       WHERE rr_t3.horse_id = rr.horse_id AND r_t3.temperature_c <= 20
     ))                                   AS avg_place_delta_temp,
 
-    -- Pedigree influence (father's own record)
-    h.father_id,
+    -- Pedigree influence
+    h.father_id            AS father_id,
+    -- Father's own race counts
     (SELECT COUNT(*)
        FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f
       WHERE rr_f.horse_id = h.father_id
@@ -165,18 +166,19 @@ WITH base AS (
        FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f2
       WHERE rr_f2.horse_id = h.father_id
     )                                     AS father_win_count,
+    -- Father's win rate
     SAFE_DIVIDE(
       (SELECT COUNTIF(rr_f2.finish_place=1)
-       FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f2
-      WHERE rr_f2.horse_id = h.father_id
+         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f2
+        WHERE rr_f2.horse_id = h.father_id
       ),
       NULLIF(
         (SELECT COUNT(*)
            FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f
           WHERE rr_f.horse_id = h.father_id
-        ),0
+        ), 0
       )
-    )                                     AS sire_win_pct
+    )                                     AS father_win_pct
 
   FROM
     `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr
