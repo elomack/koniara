@@ -31,7 +31,7 @@ SELECT
   win_pct_2000,
   win_pct_delta_rain,
   avg_place_delta_temp,
-  sire_win_count,
+  father_win_count,
   sire_win_pct,
 
   -- Categorical features (BigQuery ML will one-hot for you)
