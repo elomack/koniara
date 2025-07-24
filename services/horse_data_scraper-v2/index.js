@@ -56,22 +56,22 @@ function normalizeCareerData(raw) {
           race_count:       rec.raceCount || 0,
           race_won_count:   rec.raceWonCount || 0,
           race_prize_count: rec.racePrizeCount || 0,
-          prize_amounts:    [],
-          prize_currencies: []
+          prize_amounts:    0,       // total in PLN
+          prize_currencies: 'PLN'    // always PLN
         });
       }
       lastKey = key;
     } else if (lastKey) {
       const entry = map.get(lastKey);
       if (rec.prize) {
-        // 1. Split the incoming text, e.g. "5000 zł" or "2000 €"
+        // Split the incoming text, e.g. "5000 zł" or "2000 €"
         const parts = rec.prize.trim().split(/\s+/);
-        // 2. Parse the numeric part:
+        // Parse the numeric part:
         const rawAmount = parseFloat(parts[0].replace(',', '.'));
-        // 3. Identify currency (normalize to lowercase to be safe):
+        // Identify currency (normalize to lowercase to be safe):
         const curr = (parts[1] || '').toLowerCase();
 
-        // 4. Convert everything to PLN
+        // Convert everything to PLN
         let amountPLN;
         if (curr === '€' || curr === 'eur') {
           // apply EUR→PLN rate
@@ -81,16 +81,8 @@ function normalizeCareerData(raw) {
           amountPLN = rawAmount;
         }
 
-        // 5. Initialize the sum field if needed
-        if (entry.prize_amounts == null) {
-          entry.prize_amounts = 0;
-        }
-
-        // 6. Add to the running total
+        // Add to the running total
         entry.prize_amounts += amountPLN;
-
-        // 7. Always record the currency as PLN from now on
-        entry.prize_currencies = 'PLN';
       }
     }
   }
@@ -101,8 +93,8 @@ function normalizeCareerData(raw) {
     race_count:       e.race_count,
     race_won_count:   e.race_won_count,
     race_prize_count: e.race_prize_count,
-    prize_amounts:    e.prize_amounts.join(','),
-    prize_currencies: e.prize_currencies.join(',')
+    prize_amounts:    e.prize_amounts,      // numeric total in PLN
+    prize_currencies: e.prize_currencies    // always 'PLN'
   }));
 }
 
