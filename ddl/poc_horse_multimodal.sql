@@ -1,15 +1,15 @@
 CREATE OR REPLACE MODEL
   `horse-predictor-v2.horse_data_v2.poc_horse_multiclass`
 OPTIONS(
-  model_type            = 'LOGISTIC_REG',        -- softmax over classes
-  input_label_cols      = ['label'],             -- our “finish_place” 1–4
-  data_split_method     = 'RANDOM',              -- simple random train/eval split
-  data_split_eval_fraction = 0.2,                -- 20% hold-out
-  max_iterations        = 50                    -- up to 100 iterations for convergence
+  model_type               = 'LOGISTIC_REG',  
+  input_label_cols         = ['finish_place'],  -- now uses finish_place
+  data_split_method        = 'RANDOM',
+  data_split_eval_fraction = 0.2,
+  max_iterations           = 50
 )
 AS
 SELECT
-  -- Numeric and binary features
+  -- Numeric & binary
   distance_m,
   rest_days,
   jockey_weight_kg,
@@ -31,10 +31,11 @@ SELECT
   win_pct_2000,
   win_pct_delta_rain,
   avg_place_delta_temp,
-  father_win_count,
+  sire_race_count,
+  sire_win_count,
   sire_win_pct,
 
-  -- Categorical features (BigQuery ML will one-hot for you)
+  -- Categoricals
   temp_bucket,
   is_rainy,
   is_sunny,
@@ -51,8 +52,8 @@ SELECT
   horse_id,
   father_id,
 
-  -- Label
-  CAST(finish_place AS STRING)    AS label
+  -- **Label**: cast finish_place as string
+  CAST(finish_place AS STRING) AS finish_place
 
 FROM
   `horse-predictor-v2.horse_data_v2.race_features_poc`;
