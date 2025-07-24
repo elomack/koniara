@@ -1,15 +1,14 @@
 CREATE OR REPLACE MODEL
   `horse-predictor-v2.horse_data_v2.poc_horse_multiclass`
 OPTIONS(
-  model_type               = 'LOGISTIC_REG',  
-  input_label_cols         = ['finish_place'],  -- now uses finish_place
+  model_type               = 'LOGISTIC_REG',
+  input_label_cols         = ['finish_place'],
   data_split_method        = 'RANDOM',
   data_split_eval_fraction = 0.2,
   max_iterations           = 50
 )
 AS
 SELECT
-  -- Numeric & binary
   distance_m,
   rest_days,
   jockey_weight_kg,
@@ -34,8 +33,6 @@ SELECT
   father_race_count,
   father_win_count,
   father_win_pct,
-
-  -- Categoricals
   temp_bucket,
   is_rainy,
   is_sunny,
@@ -51,9 +48,6 @@ SELECT
   trainer_id,
   horse_id,
   father_id,
-
-  -- **Label**: cast finish_place as string
   CAST(finish_place AS STRING) AS finish_place
-
 FROM
   `horse-predictor-v2.horse_data_v2.race_features_poc`;
