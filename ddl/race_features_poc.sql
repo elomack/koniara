@@ -9,6 +9,7 @@ WITH base AS (
     rr.jockey_id,
     rr.trainer_id,
     h.breeder_id,
+    h.father_id,
 
     -- True label (all finish places)
     rr.finish_place                AS finish_place,
