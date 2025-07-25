@@ -95,11 +95,12 @@ WITH base AS (
     SAFE_CAST(rr.prize_amount AS FLOAT64)   AS prize_amount,
 
         -- Rest & form
+    -- Rest days calculation (no alias used in subsequent case)
     DATE_DIFF(r.race_date,
       LAG(r.race_date) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date), DAY) AS rest_days,
     CASE
       WHEN DATE_DIFF(r.race_date,
-        LAG(r.race_date) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date), DAY) < 7 THEN 'rest_lt_7'
+        LAG(r.race_date) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date), DAY) < 7 THEN 'rest_0_7'
       WHEN DATE_DIFF(r.race_date,
         LAG(r.race_date) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date), DAY) < 14 THEN 'rest_7_14'
       WHEN DATE_DIFF(r.race_date,
@@ -113,54 +114,22 @@ WITH base AS (
       WHEN DATE_DIFF(r.race_date,
         LAG(r.race_date) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date), DAY) <= 365 THEN 'rest_180_365'
       ELSE 'other'
-    END                                 AS rest_bucket,
+    END AS rest_bucket,
     CASE WHEN LAG(rr.finish_place) OVER (PARTITION BY rr.horse_id ORDER BY r.race_date) = 1 THEN 1 ELSE 0 END AS won_last_race,
 
-    -- Expanded form metrics using top-N subqueries with joined race dates
-    (SELECT SAFE_DIVIDE(SUM(CASE WHEN sub.finish_place=1 THEN 1 ELSE 0 END), 2)
-       FROM (
-         SELECT rr2.finish_place
-         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr2
-         JOIN `horse-predictor-v2.horse_data_v2.RACES` r2 ON rr2.race_id = r2.race_id
-         WHERE rr2.horse_id = rr.horse_id
-           AND r2.race_date < r.race_date
-         ORDER BY r2.race_date DESC
-         LIMIT 2
-       ) AS sub
-    )                                                         AS win_rate_last_2,
-    (SELECT SAFE_DIVIDE(SUM(CASE WHEN sub.finish_place=1 THEN 1 ELSE 0 END), 7)
-       FROM (
-         SELECT rr7.finish_place
-         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr7
-         JOIN `horse-predictor-v2.horse_data_v2.RACES` r7 ON rr7.race_id = r7.race_id
-         WHERE rr7.horse_id = rr.horse_id
-           AND r7.race_date < r.race_date
-         ORDER BY r7.race_date DESC
-         LIMIT 7
-       ) AS sub
-    )                                                         AS win_rate_last_7,
-    (SELECT SAFE_DIVIDE(SUM(CASE WHEN sub.finish_place>1 THEN 1 ELSE 0 END), 3)
-       FROM (
-         SELECT rr3.finish_place
-         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr3
-         JOIN `horse-predictor-v2.horse_data_v2.RACES` r3 ON rr3.race_id = r3.race_id
-         WHERE rr3.horse_id = rr.horse_id
-           AND r3.race_date < r.race_date
-         ORDER BY r3.race_date DESC
-         LIMIT 3
-       ) AS sub
-    )                                                         AS loss_rate_last_3,
-    (SELECT SAFE_DIVIDE(SUM(CASE WHEN sub.finish_place>1 THEN 1 ELSE 0 END), 5)
-       FROM (
-         SELECT rr5.finish_place
-         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr5
-         JOIN `horse-predictor-v2.horse_data_v2.RACES` r5 ON rr5.race_id = r5.race_id
-         WHERE rr5.horse_id = rr.horse_id
-           AND r5.race_date < r.race_date
-         ORDER BY r5.race_date DESC
-         LIMIT 5
-       ) AS sub
-    )                                                         AS loss_rate_last_5,
+            -- Form momentum via window functions
+    -- win_rate_last_2: % wins in previous 2 races
+    AVG(CASE WHEN rr.finish_place = 1 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY rr.horse_id ORDER BY r.race_date ROWS BETWEEN 2 PRECEDING AND 1 PRECEDING) AS win_rate_last_2,
+    -- win_rate_last_7: % wins in previous 7 races
+    AVG(CASE WHEN rr.finish_place = 1 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY rr.horse_id ORDER BY r.race_date ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING) AS win_rate_last_7,
+    -- loss_rate_last_3: % losses (>1) in previous 3 races
+    AVG(CASE WHEN rr.finish_place > 1 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY rr.horse_id ORDER BY r.race_date ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING) AS loss_rate_last_3,
+    -- loss_rate_last_5: % losses in previous 5 races
+    AVG(CASE WHEN rr.finish_place > 1 THEN 1 ELSE 0 END)
+      OVER (PARTITION BY rr.horse_id ORDER BY r.race_date ROWS BETWEEN 5 PRECEDING AND 1 PRECEDING) AS loss_rate_last_5,
 
     -- Entity metrics
     (SELECT COUNT(*) FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_jcount
@@ -183,6 +152,30 @@ WITH base AS (
        FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_b
        JOIN `horse-predictor-v2.horse_data_v2.HORSES` h_b2 ON rr_b.horse_id = h_b2.horse_id
       WHERE h_b2.breeder_id = h.breeder_id)                         AS breeder_win_pct,
+
+        -- Pedigree metrics for sire/father
+    (SELECT COUNT(*)
+       FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f
+       JOIN `horse-predictor-v2.horse_data_v2.HORSES` hf ON rr_f.horse_id = hf.horse_id
+      WHERE hf.father_id = h.father_id
+    )                                        AS father_race_count,
+    (SELECT COUNTIF(rr_f2.finish_place = 1)
+       FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f2
+       JOIN `horse-predictor-v2.horse_data_v2.HORSES` hf2 ON rr_f2.horse_id = hf2.horse_id
+      WHERE hf2.father_id = h.father_id
+    )                                        AS father_win_count,
+    SAFE_DIVIDE(
+      (SELECT COUNTIF(rr_f3.finish_place = 1)
+         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f3
+         JOIN `horse-predictor-v2.horse_data_v2.HORSES` hf3 ON rr_f3.horse_id = hf3.horse_id
+        WHERE hf3.father_id = h.father_id
+      ),
+      (SELECT COUNT(*)
+         FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_f4
+         JOIN `horse-predictor-v2.horse_data_v2.HORSES` hf4 ON rr_f4.horse_id = hf4.horse_id
+        WHERE hf4.father_id = h.father_id
+      )
+    )                                        AS father_win_pct,
 
     -- Synergy metrics
     (SELECT SAFE_DIVIDE(COUNTIF(rr_hj.finish_place<=3), COUNT(*))
@@ -211,7 +204,9 @@ WITH base AS (
       WHERE rr_d2.horse_id = rr.horse_id AND r_d2.track_distance_m = 2000
     )                                                             AS win_pct_2000,
 
-    -- Weather sensitivity & temperature effect
+-- Weather sensitivity & temperature effect
+
+-- Weather sensitivity & temperature effect
     ((SELECT SAFE_DIVIDE(COUNTIF(rr_w.finish_place=1), COUNT(*))
        FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS` rr_w
        JOIN `horse-predictor-v2.horse_data_v2.RACES` r_w ON rr_w.race_id = r_w.race_id
@@ -247,6 +242,8 @@ WITH base AS (
   JOIN `horse-predictor-v2.horse_data_v2.HORSE_CAREERS` hc ON rr.horse_id = hc.horse_id
      AND EXTRACT(YEAR FROM SAFE_CAST(r.race_date AS DATE)) = hc.race_year
   LEFT JOIN `horse-predictor-v2.horse_data_v2.HORSES` h  ON rr.horse_id = h.horse_id
+  -- Filter out invalid or placeholder finish places
+  WHERE rr.finish_place >= 1
 )
 SELECT *
 FROM base;
