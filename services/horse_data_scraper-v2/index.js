@@ -1,6 +1,23 @@
 import { Storage } from '@google-cloud/storage';
 import axios from 'axios';
 
+// FX rates to PLN
+const FX_RATES = {
+  'pln': 1,
+  'zł': 1,
+  'zl': 1,
+  'eur': 4.25,
+  '€': 4.25,
+  'Kč': 0.18,      // approximate CZK→PLN
+  'czk': 0.18,
+  'Skr': 0.42,     // SEK→PLN
+  'Ft': 0.011,     // HUF→PLN
+  'huf': 0.011,
+  'AED': 1.16,     // AED→PLN
+  'aed': 1.16,     // AED→PLN
+  '$': 4.0,        // USD→PLN
+};
+
 // CONFIG: Your GCP bucket name
 const BUCKET_NAME = process.env.BUCKET_NAME || 'horse-predictor-v2-data';
 
@@ -64,24 +81,15 @@ function normalizeCareerData(raw) {
     } else if (lastKey) {
       const entry = map.get(lastKey);
       if (rec.prize) {
-        // Split the incoming text, e.g. "5000 zł" or "2000 €"
         const parts = rec.prize.trim().split(/\s+/);
-        // Parse the numeric part:
-        const rawAmount = parseFloat(parts[0].replace(',', '.'));
-        // Identify currency (normalize to lowercase to be safe):
-        const curr = (parts[1] || '').toLowerCase();
-
-        // Convert everything to PLN
-        let amountPLN;
-        if (curr === '€' || curr === 'eur') {
-          // apply EUR→PLN rate
-          amountPLN = rawAmount * 4.25;
-        } else {
-          // treat all others (including 'zł', 'pln', or missing) as PLN
-          amountPLN = rawAmount;
+        const rawAmount = parseFloat(parts[0].replace(',', '.')) || 0;
+        const curr = (parts[1] || 'pln').toLowerCase();
+        // Lookup rate (default to PLN if unknown)
+        const rate = FX_RATES[curr] || 1;
+        if (!FX_RATES.hasOwnProperty(curr)) {
+          console.warn("⚠️ Unmapped currency '" + parts[1] + "', defaulting rate=1.");
         }
-
-        // Add to the running total
+        const amountPLN = rawAmount * rate;
         entry.prize_amounts += amountPLN;
       }
     }
@@ -112,8 +120,9 @@ function normalizeRacesData(raw) {
     horse_id:         r.horse?.id || null,
     race_id:          r.race?.id || null,
     start_order:      r.order || null,
-    finish_place:     r.place || null,
-    jockey_weight_kg: r.jockeyWeight || null,
+    finish_place: (typeof r.place === 'number' && r.place > 0)
+    ? r.place
+    : 'UNKNOWN',    jockey_weight_kg: r.jockeyWeight || null,
     prize_amount:     r.prize || null,
     prize_currency:   r.race?.currency?.code || null,
     jockey_id:        r.jockey?.id || null,

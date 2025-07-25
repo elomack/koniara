@@ -322,10 +322,13 @@ exports.ingest = async (req, res) => {
           const [stageCountRowsRR] = await bigquery.query({
             query: `
               SELECT COUNT(*) AS cnt
-              FROM \`${stagingTableFull}\`, UNNEST(races) AS r_item
+              FROM \`${stagingTableFull}\` AS st,
+              UNNEST(st.races)       AS r_item
             `
           });
           const stagingCountRR = stageCountRowsRR[0].cnt || 0;
+
+          console.debug(`staging_count done = ${stagingCountRR}`);
 
           const [existingCountRowsRR] = await bigquery.query({
             query: `
@@ -347,6 +350,7 @@ exports.ingest = async (req, res) => {
           });
           const existingCountRR = existingCountRowsRR[0].cnt || 0;
           const manualInsertedRR = stagingCountRR - existingCountRR;
+          console.debug(`existing_count done = ${existingCountRR}`);
 
           // 2. Perform MERGE for RACE_RECORDS
           const sqlRR = `
@@ -361,7 +365,7 @@ exports.ingest = async (req, res) => {
                 r_item.race_id           AS race_id,
                 st.horse_id              AS horse_id,
                 r_item.start_order       AS start_order,
-                r_item.finish_place      AS finish_place,
+                SAFE_CAST(r_item.finish_place AS INT64) AS finish_place,
                 r_item.jockey_weight_kg  AS jockey_weight_kg,
                 r_item.prize_amount      AS prize_amount,
                 r_item.prize_currency    AS prize_currency,
@@ -388,13 +392,13 @@ exports.ingest = async (req, res) => {
           const [jobRR] = await bigquery.createQueryJob({ query: sqlRR });
           await jobRR.getQueryResults();
           console.info(`✅ RACE_RECORDS MERGE: inserted=${manualInsertedRR}, updated=${existingCountRR}`);
-
-          // Cleanup staging table 
-          console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
-          await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
-          console.info(`✅ Dropped staging table ${stagingTableFull}`);
         }
-      }
+        // Cleanup staging table for horse_data
+        const stagingTableFull = `${DATASET}.${stagingId}`;
+        console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
+        await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
+        console.info(`✅ Dropped staging table ${stagingTableFull}`);
+        }
     } else if (prefix === 'jockey_data/') {
       // Process JOCKEYS reference table
       for (const entry of newFiles) {
@@ -403,7 +407,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_jockey_data_${tag}`;
-        const stagingTableFull = `${DATASET}.${stagingId}`;
+        stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -475,8 +479,8 @@ exports.ingest = async (req, res) => {
 
         // Log manual insert count for JOCKEYS
         console.info(`✅ JOCKEYS MERGE: inserted=${manualInsertedJ}, updated=${existingCountJ}`);
-
-        // Cleanup staging table 
+        // Cleanup staging table for JOCKEYS
+        const stagingTableFull = `${DATASET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);
@@ -489,7 +493,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_trainer_data_${tag}`;
-        const stagingTableFull = `${DATASET}.${stagingId}`;
+        stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -561,11 +565,12 @@ exports.ingest = async (req, res) => {
 
         // Log manual insert count for TRAINERS
         console.info(`✅ TRAINERS MERGE: inserted=${manualInsertedT}, updated=${existingCountT}`);
-
-        // Cleanup staging table 
+        // Cleanup staging table for TRAINERS
+        const stagingTableFull = `${DATAET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);
+
       }
     } else if (prefix === 'breeder_data/') {
       // Process BREEDERS reference table
@@ -575,7 +580,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_breeder_data_${tag}`;
-        const stagingTableFull = `${DATASET}.${stagingId}`;
+        stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -645,8 +650,8 @@ exports.ingest = async (req, res) => {
 
         // Log manual insert count for BREEDERS
         console.info(`✅ BREEDERS MERGE: inserted=${manualInsertedB}, updated=${existingCountB}`);
-
-        // Cleanup staging table 
+        // Cleanup staging table for BREEDERS
+        const stagingTableFull = `${DATASET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);
@@ -654,8 +659,6 @@ exports.ingest = async (req, res) => {
     } else {
       console.debug(`❌ input error: expected prefix horse, breeder, trainer or jocket`);
     }
-
-
 
     // 4. Update watermark
     console.debug('🔄 Updating watermark');
