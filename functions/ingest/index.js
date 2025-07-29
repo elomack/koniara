@@ -407,7 +407,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_jockey_data_${tag}`;
-        stagingTableFull = `${DATASET}.${stagingId}`;
+        const stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -480,7 +480,6 @@ exports.ingest = async (req, res) => {
         // Log manual insert count for JOCKEYS
         console.info(`✅ JOCKEYS MERGE: inserted=${manualInsertedJ}, updated=${existingCountJ}`);
         // Cleanup staging table for JOCKEYS
-        const stagingTableFull = `${DATASET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);
@@ -493,7 +492,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_trainer_data_${tag}`;
-        stagingTableFull = `${DATASET}.${stagingId}`;
+        const stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -566,7 +565,6 @@ exports.ingest = async (req, res) => {
         // Log manual insert count for TRAINERS
         console.info(`✅ TRAINERS MERGE: inserted=${manualInsertedT}, updated=${existingCountT}`);
         // Cleanup staging table for TRAINERS
-        const stagingTableFull = `${DATAET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);
@@ -580,7 +578,7 @@ exports.ingest = async (req, res) => {
         const m = name.match(/CLEANED_MASTERFILE_[^_]+_([0-9]{8}T[0-9_]+Z)\.ndjson$/);
         const tag = m ? m[1] : entry.created.toISOString().replace(/[:.-]/g,'_');
         const stagingId = `raw_breeder_data_${tag}`;
-        stagingTableFull = `${DATASET}.${stagingId}`;
+        const stagingTableFull = `${DATASET}.${stagingId}`;
         const uri = `gs://${BUCKET}/${name}`;
 
         // Load raw JSON into staging
@@ -651,7 +649,6 @@ exports.ingest = async (req, res) => {
         // Log manual insert count for BREEDERS
         console.info(`✅ BREEDERS MERGE: inserted=${manualInsertedB}, updated=${existingCountB}`);
         // Cleanup staging table for BREEDERS
-        const stagingTableFull = `${DATASET}.${stagingId}`;
         console.debug(`🗑️ Dropping staging table ${stagingTableFull}`);
         await bigquery.query({ query: `DROP TABLE \`${stagingTableFull}\`` });
         console.info(`✅ Dropped staging table ${stagingTableFull}`);

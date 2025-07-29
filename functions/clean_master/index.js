@@ -78,7 +78,8 @@ exports.cleanMaster = async (req, res) => {
       // Finalize write stream
       await new Promise((ok, ko) => {
         writeStream.end(() => {
-          console.debug('✋ Finished writing cleaned file');
+          console.debug('✋ Finished writing cleaned file, deleted source file');
+          masterFile.delete();
           ok();
         });
         writeStream.on('error', err => ko(err));
