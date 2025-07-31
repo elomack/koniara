@@ -17,6 +17,25 @@ SELECT
   -- Temperature continuous
   temperature_c,
 
+    -- Weather flags
+  CASE WHEN weather IN (
+    'pochmurno, przel deszcz','pochmurno, deszcz','pochm z przej, przel deszcz',
+    'pochmurno, przelotny deszcz','deszcz','pochmurno, opady deszczu',
+    'pochmurno, przelotne opady deszczu','pochmurno, przel opady',
+    'pochmurno z przejaśnieniami, przelotny deszcz','burzowo','deszczowo'
+  ) THEN TRUE ELSE FALSE END AS is_rainy,
+  CASE WHEN weather IN (
+    'pogodnie','słonecznie','pogodnie, słonecznie'
+  ) THEN TRUE ELSE FALSE END AS is_sunny,
+  CASE WHEN weather = 'upalnie' THEN TRUE ELSE FALSE END AS is_hot,
+  CASE WHEN weather IN (
+    'pochmurno','pochm z przej','pochmurno z przejaśnieniami',
+    'pochmurno z przejasnieniami','pochmurno z przej'
+  ) THEN TRUE ELSE FALSE END AS is_cloudy,
+  CASE WHEN weather IN (
+    'mgliście','mgła','mglisto'
+  ) THEN TRUE ELSE FALSE END AS is_foggy,
+
   -- Style ease score as defined
   CASE race_style
     WHEN 'w walce'         THEN 1
