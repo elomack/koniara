@@ -118,6 +118,37 @@ SELECT
   hf.breed_arabian,
   hf.breed_standardbred,
   hf.breed_anglo_arabian,
+  -- Race static features
+  rb.distance_m,
+  rb.dist_l1200,
+  rb.dist_1200_1799,
+  rb.dist_1800_2399,
+  rb.dist_2400_3000,
+  rb.dist_m3000,
+  rb.temperature_c,
+  rb.style_ease_score,
+  rb.group_I,
+  rb.group_II,
+  rb.group_III,
+  rb.group_IV,
+  rb.group_NONE,
+  rb.group_SLED,
+  rb.group_HURDLE,
+  rb.group_STEEPLECHASE,
+  rb.group_TRIAL,
+  rb.breed_thoroughbred as race_breed_thoroughbred,
+  rb.breed_arabian as race_breed_arabian,
+  rb.breed_standardbred as race_breed_standardbred,
+  rb.breed_anglo_arabian as race_breed_anglo_arabian,
+  rb.country_PL,
+  rb.city_Warsaw,
+  rb.surface_lekko_elastyczny,
+  rb.surface_elastyczny,
+  rb.surface_mocno_elastyczny,
+  rb.surface_lekki,
+  rb.surface_dobry,
+  rb.surface_miekki,
+  rb.surface_ciezki,
   -- Jockey features
   jk.jockey_total_starts,
   jk.jockey_total_wins,
@@ -154,7 +185,16 @@ SELECT
   tr.trainer_win_pct_dist_1800_2399,
   tr.trainer_win_pct_dist_2400_3000,
   tr.trainer_win_pct_dist_m3000,
-  tr.trainer_active_horses
+  tr.trainer_active_horses,
+  -- Breeder features
+  bb.breeder_progeny_count,
+  bb.breeder_total_progeny_race_count,
+  bb.breeder_total_progeny_win_count,
+  bb.breeder_avg_win_pct,
+  bb.breeder_avg_earnings,
+  bb.breeder_progeny_race_count_last_1yr,
+  bb.breeder_progeny_win_count_last_1yr,
+  bb.breeder_win_pct_progeny_last_1yr
 FROM
   `horse-predictor-v2.horse_data_v2.RACE_RECORDS` AS rr
 JOIN
@@ -165,4 +205,15 @@ LEFT JOIN
   ON rr.jockey_id = jk.jockey_id
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.trainers`('2025-07-31') AS tr
-  ON rr.trainer_id = tr.trainer_id;
+  ON rr.trainer_id = tr.trainer_id
+-- Static race features join
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.races_base` AS rb
+  ON rr.race_id = rb.race_id
+-- Link to horses master for breeder lookup
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.HORSES` AS h
+  ON rr.horse_id = h.horse_id
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.breeders`('2025-07-31') AS bb
+  ON h.breeder_id = bb.breeder_id;
