@@ -7,12 +7,19 @@ CREATE OR REPLACE TABLE FUNCTION `horse-predictor-v2.horse_data_v2.horse_feature
 )
 RETURNS TABLE<
   horse_id INT64,
-  age_years INT64
-  -- future: add is_stallion, is_mare, is_gelding, etc.
+  age_years INT64,
+  is_age_outlier BOOL,
+  is_stallion BOOL,
+  is_mare BOOL,
+  is_gelding BOOL
 > AS (
   SELECT
     hb.horse_id,
-    hb.age_years
+    hb.age_years,
+    hb.is_age_outlier,
+    hb.is_stallion,
+    hb.is_mare,
+    hb.is_gelding
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
 );
@@ -22,7 +29,10 @@ CREATE OR REPLACE VIEW `horse-predictor-v2.horse_data_v2.race_features` AS
 SELECT
   rr.race_id,
   rr.horse_id,
-  hf.age_years AS horse_age_years
+  hf.age_years AS horse_age_years,
+  hf.is_stallion,
+  hf.is_mare,
+  hf.is_gelding
   -- future: add distance_m, temperature_c, payout_zwc, etc.
 FROM
   (
