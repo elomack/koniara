@@ -15,7 +15,13 @@ RETURNS TABLE<
   breed_thoroughbred BOOL,
   breed_arabian BOOL,
   breed_standardbred BOOL,
-  breed_anglo_arabian BOOL
+  breed_anglo_arabian BOOL,
+  color_gniada BOOL,
+  color_siwa BOOL,
+  color_kasztanowata BOOL,
+  color_ciemnogniada BOOL,
+  color_skarogniada BOOL,
+  color_kara BOOL
 > AS (
   SELECT
     hb.horse_id,
@@ -27,7 +33,13 @@ RETURNS TABLE<
     hb.breed_thoroughbred,
     hb.breed_arabian,
     hb.breed_standardbred,
-    hb.breed_anglo_arabian
+    hb.breed_anglo_arabian,
+    hb.color_gniada,
+    hb.color_siwa,
+    hb.color_kasztanowata,
+    hb.color_ciemnogniada,
+    hb.color_skarogniada,
+    hb.color_kara
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
 );
