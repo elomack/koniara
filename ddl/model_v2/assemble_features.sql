@@ -33,7 +33,12 @@ RETURNS TABLE<
   trainer_win_pct FLOAT64,
   breeder_starts INT64,
   breeder_wins INT64,
-  breeder_win_pct FLOAT64
+  breeder_win_pct FLOAT64,
+  career_starts INT64,
+  career_wins INT64,
+  career_win_pct FLOAT64,
+  total_earnings FLOAT64,
+  earnings_per_start FLOAT64
 > AS (
   SELECT
     hb.horse_id,
@@ -63,12 +68,20 @@ RETURNS TABLE<
     hp.trainer_win_pct,
     hp.breeder_starts,
     hp.breeder_wins,
-    hp.breeder_win_pct
+    hp.breeder_win_pct,
+    hc.career_starts,
+    hc.career_wins,
+    hc.career_win_pct,
+    hc.total_earnings,
+    hc.earnings_per_start
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
   JOIN
     `horse-predictor-v2.horse_data_v2.horses_perf`(model_date) AS hp
     ON hb.horse_id = hp.horse_id
+  JOIN
+    `horse-predictor-v2.horse_data_v2.horses_career`(model_date) AS hc
+    ON hb.horse_id = hc.horse_id
 );
 
 -- 2) Race-level feature view for probability model
