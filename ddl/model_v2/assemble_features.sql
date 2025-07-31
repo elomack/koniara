@@ -108,6 +108,8 @@ CREATE OR REPLACE VIEW `horse-predictor-v2.horse_data_v2.race_features` AS
 SELECT
   rr.race_id,
   rr.horse_id,
+  rr.jockey_id,
+  rr.trainer_id,
   hf.age_years         AS horse_age_years,
   hf.is_stallion,
   hf.is_mare,
@@ -133,7 +135,26 @@ SELECT
   jk.jockey_win_pct_dist_1200_1799,
   jk.jockey_win_pct_dist_1800_2399,
   jk.jockey_win_pct_dist_2400_3000,
-  jk.jockey_win_pct_dist_m3000
+  jk.jockey_win_pct_dist_m3000,
+  -- Trainer features
+  tr.trainer_total_starts,
+  tr.trainer_total_wins,
+  tr.trainer_win_pct,
+  tr.trainer_win_pct_last_30d,
+  tr.trainer_win_pct_last_60d,
+  tr.trainer_win_pct_surface_lekkoelastyczny,
+  tr.trainer_win_pct_surface_elastyczny,
+  tr.trainer_win_pct_surface_mocnoelastyczny,
+  tr.trainer_win_pct_surface_lekki,
+  tr.trainer_win_pct_surface_dobry,
+  tr.trainer_win_pct_surface_miekki,
+  tr.trainer_win_pct_surface_ciezki,
+  tr.trainer_win_pct_dist_l1200,
+  tr.trainer_win_pct_dist_1200_1799,
+  tr.trainer_win_pct_dist_1800_2399,
+  tr.trainer_win_pct_dist_2400_3000,
+  tr.trainer_win_pct_dist_m3000,
+  tr.trainer_active_horses
 FROM
   `horse-predictor-v2.horse_data_v2.RACE_RECORDS` AS rr
 JOIN
@@ -141,4 +162,7 @@ JOIN
   ON rr.horse_id = hf.horse_id
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.jockeys`('2025-07-31') AS jk
-  ON rr.jockey_id = jk.jockey_id;
+  ON rr.jockey_id = jk.jockey_id
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.trainers`('2025-07-31') AS tr
+  ON rr.trainer_id = tr.trainer_id;
