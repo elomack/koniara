@@ -108,22 +108,37 @@ CREATE OR REPLACE VIEW `horse-predictor-v2.horse_data_v2.race_features` AS
 SELECT
   rr.race_id,
   rr.horse_id,
-  hf.age_years        AS horse_age_years,
+  hf.age_years         AS horse_age_years,
   hf.is_stallion,
   hf.is_mare,
   hf.is_gelding,
   hf.breed_thoroughbred,
   hf.breed_arabian,
   hf.breed_standardbred,
-  hf.breed_anglo_arabian
-  -- future: add distance_m, temperature_c, payout_zwc, etc.
+  hf.breed_anglo_arabian,
+  -- Jockey features
+  jk.jockey_total_starts,
+  jk.jockey_total_wins,
+  jk.jockey_win_pct,
+  jk.jockey_win_pct_last_30d,
+  jk.jockey_win_pct_last_60d,
+  jk.jockey_win_pct_surface_lekkoelastyczny,
+  jk.jockey_win_pct_surface_elastyczny,
+  jk.jockey_win_pct_surface_mocnoelastyczny,
+  jk.jockey_win_pct_surface_lekki,
+  jk.jockey_win_pct_surface_dobry,
+  jk.jockey_win_pct_surface_miekki,
+  jk.jockey_win_pct_surface_ciezki,
+  jk.jockey_win_pct_dist_l1200,
+  jk.jockey_win_pct_dist_1200_1799,
+  jk.jockey_win_pct_dist_1800_2399,
+  jk.jockey_win_pct_dist_2400_3000,
+  jk.jockey_win_pct_dist_m3000
 FROM
-  (
-    -- stub: pull minimal race_records for structure
-    SELECT race_id, horse_id
-    FROM `horse-predictor-v2.horse_data_v2.RACE_RECORDS`
-    LIMIT 1
-  ) AS rr
+  `horse-predictor-v2.horse_data_v2.RACE_RECORDS` AS rr
 JOIN
   `horse-predictor-v2.horse_data_v2.horse_features`('2025-07-31') AS hf
-  ON rr.horse_id = hf.horse_id;
+  ON rr.horse_id = hf.horse_id
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.jockeys`('2025-07-31') AS jk
+  ON rr.jockey_id = jk.jockey_id;
