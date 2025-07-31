@@ -21,7 +21,19 @@ RETURNS TABLE<
   color_kasztanowata BOOL,
   color_ciemnogniada BOOL,
   color_skarogniada BOOL,
-  color_kara BOOL
+  color_kara BOOL,
+  sire_starts INT64,
+  sire_wins INT64,
+  sire_win_pct FLOAT64,
+  dam_starts INT64,
+  dam_wins INT64,
+  dam_win_pct FLOAT64,
+  trainer_starts INT64,
+  trainer_wins INT64,
+  trainer_win_pct FLOAT64,
+  breeder_starts INT64,
+  breeder_wins INT64,
+  breeder_win_pct FLOAT64
 > AS (
   SELECT
     hb.horse_id,
@@ -39,9 +51,24 @@ RETURNS TABLE<
     hb.color_kasztanowata,
     hb.color_ciemnogniada,
     hb.color_skarogniada,
-    hb.color_kara
+    hb.color_kara,
+    hp.sire_starts,
+    hp.sire_wins,
+    hp.sire_win_pct,
+    hp.dam_starts,
+    hp.dam_wins,
+    hp.dam_win_pct,
+    hp.trainer_starts,
+    hp.trainer_wins,
+    hp.trainer_win_pct,
+    hp.breeder_starts,
+    hp.breeder_wins,
+    hp.breeder_win_pct
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
+  JOIN
+    `horse-predictor-v2.horse_data_v2.horses_perf`(model_date) AS hp
+    ON hb.horse_id = hp.horse_id
 );
 
 -- 2) Race-level feature view for probability model
