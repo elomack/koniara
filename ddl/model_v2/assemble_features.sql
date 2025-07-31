@@ -154,6 +154,11 @@ SELECT
   rb.surface_dobry,
   rb.surface_miekki,
   rb.surface_ciezki,
+  -- Race records context features
+  rc.field_size,
+  rc.start_order,
+  rc.jockey_weight_kg,
+  rc.weight_diff,
   -- Payout features
   rp.payout_zwc,
   rp.payout_pdk,
@@ -221,6 +226,10 @@ LEFT JOIN
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.races_base` AS rb
   ON rr.race_id = rb.race_id
+-- Records context features join
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.records_context` AS rc
+  ON rr.race_id = rc.race_id AND rr.horse_id = rc.horse_id
 -- Payouts join
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.races_payouts` AS rp
