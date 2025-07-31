@@ -11,7 +11,11 @@ RETURNS TABLE<
   is_age_outlier BOOL,
   is_stallion BOOL,
   is_mare BOOL,
-  is_gelding BOOL
+  is_gelding BOOL,
+  breed_thoroughbred BOOL,
+  breed_arabian BOOL,
+  breed_standardbred BOOL,
+  breed_anglo_arabian BOOL
 > AS (
   SELECT
     hb.horse_id,
@@ -19,7 +23,11 @@ RETURNS TABLE<
     hb.is_age_outlier,
     hb.is_stallion,
     hb.is_mare,
-    hb.is_gelding
+    hb.is_gelding,
+    hb.breed_thoroughbred,
+    hb.breed_arabian,
+    hb.breed_standardbred,
+    hb.breed_anglo_arabian
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
 );
@@ -29,10 +37,14 @@ CREATE OR REPLACE VIEW `horse-predictor-v2.horse_data_v2.race_features` AS
 SELECT
   rr.race_id,
   rr.horse_id,
-  hf.age_years AS horse_age_years,
+  hf.age_years        AS horse_age_years,
   hf.is_stallion,
   hf.is_mare,
-  hf.is_gelding
+  hf.is_gelding,
+  hf.breed_thoroughbred,
+  hf.breed_arabian,
+  hf.breed_standardbred,
+  hf.breed_anglo_arabian
   -- future: add distance_m, temperature_c, payout_zwc, etc.
 FROM
   (
