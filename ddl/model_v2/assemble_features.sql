@@ -159,6 +159,11 @@ SELECT
   rc.start_order,
   rc.jockey_weight_kg,
   rc.weight_diff,
+  -- Race outcomes context features
+  ro.finish_place,
+  ro.is_win,
+  ro.is_place,
+  ro.is_paid,
   -- Payout features
   rp.payout_zwc,
   rp.payout_pdk,
@@ -230,6 +235,10 @@ LEFT JOIN
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.records_context` AS rc
   ON rr.race_id = rc.race_id AND rr.horse_id = rc.horse_id
+-- Records outcomes features join
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.records_outcomes` AS ro
+  ON rr.race_id = ro.race_id AND rr.horse_id = ro.horse_id
 -- Payouts join
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.races_payouts` AS rp
