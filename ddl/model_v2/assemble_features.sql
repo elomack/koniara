@@ -38,7 +38,15 @@ RETURNS TABLE<
   career_wins INT64,
   career_win_pct FLOAT64,
   total_earnings FLOAT64,
-  earnings_per_start FLOAT64
+  earnings_per_start FLOAT64,
+  rolling_race_count_last_3yrs INT64,
+  rolling_win_count_last_3yrs INT64,
+  rolling_win_pct_last_3yrs FLOAT64,
+  race_count_current_year INT64,
+  win_count_current_year INT64,
+  win_pct_current_year FLOAT64,
+  current_vs_last3yrs_win_pct FLOAT64,
+  days_since_last_race INT64
 > AS (
   SELECT
     hb.horse_id,
@@ -73,7 +81,15 @@ RETURNS TABLE<
     hc.career_wins,
     hc.career_win_pct,
     hc.total_earnings,
-    hc.earnings_per_start
+    hc.earnings_per_start,
+    hr.rolling_race_count_last_3yrs,
+    hr.rolling_win_count_last_3yrs,
+    hr.rolling_win_pct_last_3yrs,
+    hr.race_count_current_year,
+    hr.win_count_current_year,
+    hr.win_pct_current_year,
+    hr.current_vs_last3yrs_win_pct,
+    hr.days_since_last_race
   FROM
     `horse-predictor-v2.horse_data_v2.horses_base`(model_date) AS hb
   JOIN
@@ -82,6 +98,9 @@ RETURNS TABLE<
   JOIN
     `horse-predictor-v2.horse_data_v2.horses_career`(model_date) AS hc
     ON hb.horse_id = hc.horse_id
+  JOIN
+    `horse-predictor-v2.horse_data_v2.horses_recent`(model_date) AS hr
+    ON hb.horse_id = hr.horse_id
 );
 
 -- 2) Race-level feature view for probability model
