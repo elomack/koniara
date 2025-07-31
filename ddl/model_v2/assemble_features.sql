@@ -149,6 +149,12 @@ SELECT
   rb.surface_dobry,
   rb.surface_miekki,
   rb.surface_ciezki,
+  -- Payout features
+  rp.payout_zwc,
+  rp.payout_pdk,
+  rp.payout_dwj,
+  rp.payout_trj,
+  rp.payout_czw,
   -- Jockey features
   jk.jockey_total_starts,
   jk.jockey_total_wins,
@@ -210,6 +216,10 @@ LEFT JOIN
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.races_base` AS rb
   ON rr.race_id = rb.race_id
+-- Payouts join
+LEFT JOIN
+  `horse-predictor-v2.horse_data_v2.races_payouts` AS rp
+  ON rr.race_id = rp.race_id
 -- Link to horses master for breeder lookup
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.HORSES` AS h
