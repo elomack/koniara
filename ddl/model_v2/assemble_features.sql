@@ -165,17 +165,17 @@ SELECT
   ro.is_place,
   ro.is_paid,
   -- Payout features
-  rp.payout_zwc,
-  rp.payout_pdk,
-  rp.payout_dwj,
-  rp.payout_trj,
-  rp.payout_czw,
+  --rp.payout_zwc,
+  --rp.payout_pdk,
+  --rp.payout_dwj,
+  --rp.payout_trj,
+  --rp.payout_czw,
   -- Jockey features
   jk.jockey_total_starts,
   jk.jockey_total_wins,
   jk.jockey_win_pct,
-  jk.jockey_win_pct_last_30d,
-  jk.jockey_win_pct_last_60d,
+  COALESCE(jk.jockey_win_pct_last_30d, 0.0)  AS jockey_win_pct_last_30d,
+  COALESCE(jk.jockey_win_pct_last_60d, 0.0)  AS jockey_win_pct_last_60d,
   jk.jockey_win_pct_surface_lekkoelastyczny,
   jk.jockey_win_pct_surface_elastyczny,
   jk.jockey_win_pct_surface_mocnoelastyczny,
@@ -192,8 +192,8 @@ SELECT
   tr.trainer_total_starts,
   tr.trainer_total_wins,
   tr.trainer_win_pct,
-  tr.trainer_win_pct_last_30d,
-  tr.trainer_win_pct_last_60d,
+  COALESCE(tr.trainer_win_pct_last_30d,0.0)  AS trainer_win_pct_last_30d,
+  COALESCE(tr.trainer_win_pct_last_60d,0.0)  AS trainer_win_pct_last_60d,
   tr.trainer_win_pct_surface_lekkoelastyczny,
   tr.trainer_win_pct_surface_elastyczny,
   tr.trainer_win_pct_surface_mocnoelastyczny,
@@ -249,4 +249,8 @@ LEFT JOIN
   ON rr.horse_id = h.horse_id
 LEFT JOIN
   `horse-predictor-v2.horse_data_v2.breeders`('2025-07-31') AS bb
-  ON h.breeder_id = bb.breeder_id;
+  ON h.breeder_id = bb.breeder_id
+
+WHERE
+  rr.start_order   IS NOT NULL
+  AND rr.finish_place IS NOT NULL;
