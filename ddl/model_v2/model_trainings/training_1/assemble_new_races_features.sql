@@ -1,107 +1,149 @@
-CREATE OR REPLACE TABLE
-  `horse-predictor-v2.horse_data_v2.features_SLZ_03082025` AS
+-- Live Predictions SQL for All Upcoming Races (Include Horse Career Stats, Remove is_paid)
+--
+-- This script loads today's upcoming races from your staging table,
+-- enriches them with pre-computed features, calls your BigQuery ML model,
+-- and outputs specified fields, including horse career aggregates and
+-- the top 12 finish-place probabilities.
 
-WITH inp AS (
+-- 1. Define the model date for today's races (used for features TVF)
+DECLARE model_date DATE DEFAULT '2025-08-03';
+
+WITH
+-- 2. Load staging CSV input and assign a row number for join-back
+staging AS (
   SELECT
+    ROW_NUMBER() OVER() AS rownum,
     race_number,
-    CAST(horse_id  AS STRING) AS horse_id,
-    CAST(jockey_id AS STRING) AS jockey_id,
-    CAST(trainer_id AS STRING) AS trainer_id,
-    temperature_c,
-    is_rainy, is_cloudy, is_sunny, is_hot, is_foggy,
-    distance_m, dist_l1200, dist_1200_1799, dist_1800_2399, dist_2400_3000, dist_m3000,
-    field_size, start_order, jockey_weight_kg,
-    group_I, group_II, group_III, group_IV, group_NONE,
-    group_SLED, group_HURDLE, group_STEEPLECHASE, group_TRIAL,
-    race_breed_thoroughbred, race_breed_arabian,
-    race_breed_standardbred, race_breed_anglo_arabian,
-    country_PL, city_Warsaw,
-    surface_lekko_elastyczny, surface_elastyczny,
-    surface_mocno_elastyczny, surface_lekki,
-    surface_dobry, surface_miekki, surface_ciezki
+    horse_id,
+    trainer_id,
+    jockey_id,
+    jockey_weight_kg,
+    start_order
   FROM
     `horse-predictor-v2.horse_data_v2.races_SLZ_03082025`
 ),
 
-h AS (
+-- 3. Join to features TVF to get engineered features
+features AS (
   SELECT
-    CAST(horse_id AS STRING) AS horse_id,
-    breeder_id,
-    horse_age_years,
-    is_stallion, is_mare, is_gelding,
-    breed_thoroughbred, breed_arabian,
-    breed_standardbred, breed_anglo_arabian
+    s.*,                -- staging columns + rownum
+    rf.* EXCEPT(
+      race_id,
+      horse_id,
+      trainer_id,
+      jockey_id,
+      jockey_weight_kg,
+      start_order
+    )                   -- engineered features only
   FROM
-    `horse-predictor-v2.horse_data_v2.HORSES`
+    staging AS s
+  JOIN
+    `horse-predictor-v2.horse_data_v2.race_features` AS rf
+  ON
+    rf.horse_id   = s.horse_id
+    AND rf.jockey_id  = s.jockey_id
+    AND rf.trainer_id = s.trainer_id
 ),
 
-b AS (
+-- 4. Prepare input for ML.PREDICT by combining staging and engineered features
+pred_input AS (
   SELECT
-    CAST(breeder_id AS STRING) AS breeder_id,
-    breeder_progeny_count,
-    breeder_total_progeny_race_count,
-    breeder_total_progeny_win_count,
-    breeder_avg_win_pct,
-    breeder_avg_earnings,
-    breeder_progeny_race_count_last_1yr,
-    breeder_progeny_win_count_last_1yr,
-    breeder_win_pct_progeny_last_1yr
+    f.rownum,
+    CAST(NULL AS INT64) AS race_id,  -- placeholder
+    f.* EXCEPT(rownum)               -- all staging & engineered feature columns
   FROM
-    `horse-predictor-v2.horse_data_v2.BREEDERS`
+    features AS f
 ),
 
-hf AS (
-  SELECT * EXCEPT(snapshot_date)
-  FROM `horse-predictor-v2.horse_data_v2.horse_features`(DATE '2025-07-31')
+-- 5. Run ML.PREDICT
+pred_raw AS (
+  SELECT *
+  FROM ML.PREDICT(
+    MODEL `horse-predictor-v2.horse_data_v2.train_race_prediction_v1`,
+    TABLE pred_input
+  )
 ),
 
-j AS (
+-- 6. Reattach staging identifiers and select core prediction outputs (drop is_paid)
+predictions AS (
   SELECT
-    CAST(jockey_id AS STRING) AS jockey_id,
-    jockey_total_starts, jockey_total_wins, jockey_win_pct,
-    jockey_win_pct_last_30d, jockey_win_pct_last_60d,
-    jockey_win_pct_surface_lekkoelastyczny, jockey_win_pct_surface_elastyczny,
-    jockey_win_pct_surface_mocnoelastyczny, jockey_win_pct_surface_lekki,
-    jockey_win_pct_surface_dobry, jockey_win_pct_surface_miekki,
-    jockey_win_pct_surface_ciezki,
-    jockey_win_pct_dist_l1200, jockey_win_pct_dist_1200_1799,
-    jockey_win_pct_dist_1800_2399, jockey_win_pct_dist_2400_3000,
-    jockey_win_pct_dist_m3000
+    s.race_number,
+    s.start_order,
+    pr.horse_id,
+    pr.jockey_id,
+    pr.trainer_id,
+    pr.horse_age_years,
+    pr.jockey_weight_kg,
+    pr.jockey_win_pct,
+    pr.jockey_win_pct_last_30d,
+    pr.jockey_win_pct_last_60d,
+    pr.trainer_win_pct,
+    pr.trainer_win_pct_last_30d,
+    pr.trainer_win_pct_last_60d,
+    pr.predicted_finish_place_probs
   FROM
-    `horse-predictor-v2.horse_data_v2.JOCKEYS`
+    pred_raw AS pr
+  JOIN staging AS s ON pr.rownum = s.rownum
 ),
 
-t AS (
+-- 7. Aggregate horse career stats from HORSE_CAREERS
+horse_stats AS (
   SELECT
-    CAST(trainer_id AS STRING) AS trainer_id,
-    trainer_total_starts, trainer_total_wins, trainer_win_pct,
-    trainer_win_pct_last_30d, trainer_win_pct_last_60d,
-    trainer_win_pct_surface_lekkoelastyczny, trainer_win_pct_surface_elastyczny,
-    trainer_win_pct_surface_mocnoelastyczny, trainer_win_pct_surface_lekki,
-    trainer_win_pct_surface_dobry, trainer_win_pct_surface_miekki,
-    trainer_win_pct_surface_ciezki,
-    trainer_win_pct_dist_l1200, trainer_win_pct_dist_1200_1799,
-    trainer_win_pct_dist_1800_2399, trainer_win_pct_dist_2400_3000,
-    trainer_win_pct_dist_m3000, trainer_active_horses
+    horse_id,
+    SUM(race_count)       AS horse_career_starts,
+    SUM(race_won_count)   AS horse_career_wins,
+    SUM(CASE WHEN race_year = EXTRACT(YEAR FROM CURRENT_DATE()) THEN race_count ELSE 0 END)       AS horse_year_starts,
+    SUM(CASE WHEN race_year = EXTRACT(YEAR FROM CURRENT_DATE()) THEN race_won_count ELSE 0 END)   AS horse_year_wins
   FROM
-    `horse-predictor-v2.horse_data_v2.TRAINERS`
+    `horse-predictor-v2.horse_data_v2.HORSE_CAREERS`
+  GROUP BY
+    horse_id
+),
+
+-- 8. Final output with career stats, names, and separate probability columns
+final_output AS (
+  SELECT
+    p.race_number,
+    p.start_order,
+    h.horse_name,
+    p.horse_age_years,
+    p.horse_id,
+    hs.horse_career_starts,
+    hs.horse_career_wins,
+    hs.horse_year_starts,
+    hs.horse_year_wins,
+    j.last_name            AS jockey_last_name,
+    p.jockey_weight_kg,
+    p.jockey_win_pct,
+    p.jockey_win_pct_last_30d,
+    p.jockey_win_pct_last_60d,
+    p.jockey_id,
+    t.last_name            AS trainer_last_name,
+    p.trainer_id,
+    p.trainer_win_pct,
+    p.trainer_win_pct_last_30d,
+    p.trainer_win_pct_last_60d,
+    p.predicted_finish_place_probs[OFFSET(0)].prob  AS prob_1,
+    p.predicted_finish_place_probs[OFFSET(1)].prob  AS prob_2,
+    p.predicted_finish_place_probs[OFFSET(2)].prob  AS prob_3,
+    p.predicted_finish_place_probs[OFFSET(3)].prob  AS prob_4,
+    p.predicted_finish_place_probs[OFFSET(4)].prob  AS prob_5,
+    p.predicted_finish_place_probs[OFFSET(5)].prob  AS prob_6,
+    p.predicted_finish_place_probs[OFFSET(6)].prob  AS prob_7,
+    p.predicted_finish_place_probs[OFFSET(7)].prob  AS prob_8,
+    p.predicted_finish_place_probs[OFFSET(8)].prob  AS prob_9,
+    p.predicted_finish_place_probs[OFFSET(9)].prob  AS prob_10,
+    p.predicted_finish_place_probs[OFFSET(10)].prob AS prob_11,
+    p.predicted_finish_place_probs[OFFSET(11)].prob AS prob_12
+  FROM
+    predictions AS p
+  LEFT JOIN horse_stats AS hs ON p.horse_id = hs.horse_id
+  LEFT JOIN `horse-predictor-v2.horse_data_v2.HORSES` AS h ON p.horse_id = h.horse_id
+  LEFT JOIN `horse-predictor-v2.horse_data_v2.JOCKEYS` AS j ON p.jockey_id = j.jockey_id
+  LEFT JOIN `horse-predictor-v2.horse_data_v2.TRAINERS` AS t ON p.trainer_id = t.trainer_id
 )
 
-SELECT
-  inp.*,
-  h.horse_age_years, h.is_stallion, h.is_mare, h.is_gelding,
-  h.breed_thoroughbred, h.breed_arabian,
-  h.breed_standardbred, h.breed_anglo_arabian,
-  b.breeder_progeny_count, b.breeder_total_progeny_race_count,
-  b.breeder_total_progeny_win_count, b.breeder_avg_win_pct,
-  b.breeder_avg_earnings, b.breeder_progeny_race_count_last_1yr,
-  b.breeder_progeny_win_count_last_1yr, b.breeder_win_pct_progeny_last_1yr,
-  hf.* EXCEPT(horse_id),
-  j.* EXCEPT(jockey_id),
-  t.* EXCEPT(trainer_id)
-FROM inp
-LEFT JOIN h  USING(horse_id)
-LEFT JOIN b  USING(breeder_id)
-LEFT JOIN hf USING(horse_id)
-LEFT JOIN j  USING(jockey_id)
-LEFT JOIN t  USING(trainer_id);
+-- 9. Select and order
+SELECT *
+FROM final_output
+ORDER BY race_number, start_order;
