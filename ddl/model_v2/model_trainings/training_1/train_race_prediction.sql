@@ -1,6 +1,6 @@
 -- 1) Train v2 softmax model, using the rebuilt race_features view
 CREATE OR REPLACE MODEL
-  `horse-predictor-v2.horse_data_v2.train_race_prediction_v2`
+  `horse-predictor-v2.horse_data_v2.train_race_prediction_v1`
 OPTIONS(
   MODEL_TYPE               = 'logistic_reg',      -- Softmax multiclass
   INPUT_LABEL_COLS         = ['finish_place'],    -- Label
@@ -23,9 +23,12 @@ WHERE
 CREATE OR REPLACE TABLE
   `horse-predictor-v2.horse_data_v2.latest_race_eval_v1` AS
 SELECT
-  LOG_LOSS       AS log_loss,
-  ACCURACY       AS accuracy,
-  TOP_1_ACCURACY AS top_k_accuracy
+  LOG_LOSS    AS log_loss,
+  ACCURACY    AS accuracy,
+  PRECISION   AS precision,
+  RECALL      AS recall,
+  F1_SCORE    AS f1_score,
+  CURRENT_DATETIME() AS eval_timestamp
 FROM
   ML.EVALUATE(
     MODEL `horse-predictor-v2.horse_data_v2.train_race_prediction_v1`
@@ -41,26 +44,25 @@ INSERT INTO
   label_column,
   training_window,
   feature_snapshot,
-  mae,         -- NULL for classification
-  rmse,        -- NULL for classification
-  r2_score,    -- NULL for classification
-  expl_variance, -- NULL for classification
   log_loss,
   accuracy,
-  top_k_accuracy,
+  precision,
+  recall,
+  f1_score,
   description
 )
 SELECT
   'race_prediction_v1'                        AS model_name,
-  CURRENT_DATETIME()                          AS run_timestamp,
+  eval_timestamp                              AS run_timestamp,
   'logistic_reg'                              AS model_type,
   'finish_place'                              AS label_column,
   'All races, random 70/15/15 split'          AS training_window,
   NULL                                        AS feature_snapshot,
-  NULL, NULL, NULL, NULL,                     -- regression columns
-  le.log_loss,
-  le.accuracy,
-  le.top_k_accuracy,
-  'v2: removed payouts + explicit defaults for recent-form nulls' AS description
+  log_loss,
+  accuracy,
+  precision,
+  recall,
+  f1_score,
+  'v1: dropped NULL labels, removed payouts, explicit defaults for recent-form nulls' AS description
 FROM
-  `horse-predictor-v2.horse_data_v2.latest_race_eval_v1` AS le;
+  `horse-predictor-v2.horse_data_v2.latest_race_eval_v1`;
