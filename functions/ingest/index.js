@@ -76,6 +76,8 @@ exports.ingest = async (req, res) => {
               sourceUris: [uri],
               sourceFormat: 'NEWLINE_DELIMITED_JSON',
               autodetect: true,
+              // allow up to 5 rows with prize_amount="237.5" (or other parse errors) to be skipped
+              maxBadRecords: 5,
               writeDisposition: 'WRITE_TRUNCATE'
             }
           }
@@ -367,7 +369,9 @@ exports.ingest = async (req, res) => {
                 r_item.start_order       AS start_order,
                 SAFE_CAST(r_item.finish_place AS INT64) AS finish_place,
                 r_item.jockey_weight_kg  AS jockey_weight_kg,
-                r_item.prize_amount      AS prize_amount,
+                  SAFE_CAST(
+                    CAST(r_item.prize_amount AS FLOAT64)
+                  AS INT64)               AS prize_amount,
                 r_item.prize_currency    AS prize_currency,
                 r_item.jockey_id         AS jockey_id,
                 r_item.trainer_id        AS trainer_id
