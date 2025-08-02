@@ -31,11 +31,11 @@ SELECT
   hf.*, 
   lr.rating_score
 FROM
-  `horse-predictor-v2.horse_data_v2.horse_features`(DATE '2025-07-31') AS hf
+  `horse-predictor-v2.horse_data_v2.horse_features`(DATE '2025-08-02') AS hf
 JOIN
   `horse-predictor-v2.horse_data_v2.horse_rating_labels` AS lr
   ON CAST(hf.horse_id AS STRING) = lr.horse_id
-     AND lr.snapshot_date = DATE '2025-07-31'
+     AND lr.snapshot_date = DATE '2025-08-02'
 WHERE
   lr.rating_score IS NOT NULL;
 
